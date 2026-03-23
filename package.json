@@ -1,0 +1,57 @@
+{
+  "name": "backlog-integration",
+  "version": "0.1.0",
+  "description": "CLI installer package for the backlog-integration skill.",
+  "author": "AnhNQ",
+  "license": "MIT",
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anhnq/backlog-integration-skill.git"
+  },
+  "homepage": "https://github.com/anhnq/backlog-integration-skill#readme",
+  "bugs": {
+    "url": "https://github.com/anhnq/backlog-integration-skill/issues"
+  },
+  "skills": {
+    "name": "backlog-integration",
+    "description": "Backlog.com integration via MCP Server + REST API for bug fetching, analysis logging, and issue management.",
+    "tags": [
+      "backlog",
+      "bugfix",
+      "claude",
+      "cursor",
+      "codex",
+      "antigravity",
+      "opencode"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "skill",
+    "backlog",
+    "bugfix",
+    "claude-code",
+    "cursor",
+    "codex",
+    "antigravity",
+    "opencode"
+  ],
+  "bin": {
+    "backlog-integration": "./bin/backlog-integration.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "release:check": "npm test && npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

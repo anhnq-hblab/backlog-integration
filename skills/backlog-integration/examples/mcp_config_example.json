@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "backlog": {
+      "command": "backlog-mcp-server",
+      "env": {
+        "BACKLOG_DOMAIN": "your-domain.backlog.com",
+        "BACKLOG_API_KEY": "your-api-key-here",
+        "OPTIMIZE_RESPONSE": "1",
+        "MAX_TOKENS": "10000",
+        "ENABLE_TOOLSETS": "space,project,issue,git"
+      }
+    }
+  }
+}
