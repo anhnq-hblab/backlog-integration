@@ -12,6 +12,7 @@ const {
   resolveWorkflowPath,
 } = require("./paths");
 const { createWizardState, reduceWizardState, renderWizard } = require("./wizard");
+const { detectConfig } = require("./detect");
 
 const SUPPORTED_TOOLS = ["claude-code", "cursor", "codex", "antigravity", "opencode"];
 const TOOL_CHOICES = [
@@ -33,14 +34,23 @@ function printHelp() {
 Usage:
   backlog-integration install
   backlog-integration install --tool <name|all> --location <global|project-local> [--project-path <dir>] [--dest <dir>]
+  backlog-integration setup [--project-path <dir>] [--api-key <key>]
   backlog-integration help
+
+Commands:
+  install     Install skill + workflows into AI tool directories.
+  setup       Generate .brain/backlog.json with auto-detected config.
+              Detects git_host, backlog_space, project_key from git remote.
+              Only the API key needs manual input.
+  help        Show this help message.
 
 Options:
   --tool        claude-code | claude | cursor | codex | antigravity | opencode | all
   --location    global | project-local | project | local
   --project-path
-                Project root used for project-local installs. Defaults to current working directory.
+                Project root used for project-local installs or setup. Defaults to cwd.
   --dest        Override the resolved install directory completely.
+  --api-key     Backlog API key (for setup command).
 
 Behavior:
   If --tool or --location is missing, the installer switches to interactive mode.
@@ -275,11 +285,57 @@ async function runInstall(options) {
   }
 }
 
+async function runSetup(options) {
+  const projectPath = options["project-path"]
+    ? path.resolve(options["project-path"])
+    : path.resolve(process.cwd());
+
+  const config = detectConfig(projectPath);
+  const { _detected, ...cleanConfig } = config;
+
+  if (options["api-key"]) {
+    cleanConfig.backlog_api_key = options["api-key"];
+  }
+
+  const brainDir = path.join(projectPath, ".brain");
+  const configPath = path.join(brainDir, "backlog.json");
+
+  fs.mkdirSync(brainDir, { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(cleanConfig, null, 2) + "\n");
+
+  const gitignorePath = path.join(projectPath, ".gitignore");
+  if (fs.existsSync(gitignorePath)) {
+    const content = fs.readFileSync(gitignorePath, "utf8");
+    if (!content.includes(".brain/")) {
+      fs.appendFileSync(gitignorePath, "\n.brain/\n");
+      console.log("Added .brain/ to .gitignore");
+    }
+  }
+
+  console.log(`\n📝 Config generated: ${configPath}`);
+  console.log(`\n🔍 Auto-detected:`);
+  console.log(`   git_host:      ${cleanConfig.git_host}${_detected.git_host_detected ? " ✅" : " (default)"}`);
+  console.log(`   backlog_space:  ${cleanConfig.backlog_space}${_detected.backlog_space_detected ? " ✅" : " ⚠️  edit manually"}`);
+  console.log(`   project_key:    ${cleanConfig.project_key}${_detected.project_key_detected ? " ✅" : " ⚠️  edit manually"}`);
+
+  if (!cleanConfig.backlog_api_key) {
+    console.log(`\n⚠️  API key not set. Edit ${configPath} and add your backlog_api_key.`);
+    console.log(`   Get it from: Profile → API Settings on your Backlog space.`);
+  } else {
+    console.log(`\n✅ API key set.`);
+  }
+}
+
 async function run(argv) {
   const { command, options } = parseArgs(argv);
 
   if (!command || command === "help" || command === "--help" || command === "-h") {
     printHelp();
+    return 0;
+  }
+
+  if (command === "setup") {
+    await runSetup(options);
     return 0;
   }
 
