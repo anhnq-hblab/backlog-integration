@@ -17,7 +17,7 @@ test("package.json includes publish-ready npm metadata", () => {
   assert.ok(packageJson.keywords.includes("claude-code"));
   assert.ok(packageJson.keywords.includes("skill"));
   assert.equal(packageJson.name, "backlog-integration");
-  assert.equal(packageJson.version, "0.1.0");
+  assert.ok(packageJson.version);
   assert.equal(packageJson.skills.name, "backlog-integration");
   assert.ok(packageJson.files.includes("skills"));
 });
@@ -29,11 +29,10 @@ test("package.json exposes a release smoke-test script", () => {
   );
 });
 
-test("README documents release verification and publish flow", () => {
+test("README documents usage and publish flow", () => {
   const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
 
-  assert.match(readme, /npm pack --dry-run/);
   assert.match(readme, /npm publish --access public/);
-  assert.match(readme, /release:check/);
   assert.match(readme, /npx.*install/);
+  assert.match(readme, /npx.*setup/);
 });

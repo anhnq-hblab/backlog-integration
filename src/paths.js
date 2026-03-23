@@ -67,7 +67,7 @@ function resolveWorkflowBaseDir({ tool, location, homeDir, cwd, preferGeminiAnti
       "claude-code": ".claude/commands",
       cursor: ".cursor/workflows",
       codex: ".codex/workflows",
-      antigravity: ".agents/workflows",
+      antigravity: ".agent/workflows",
       opencode: ".opencode/workflows",
     };
     return path.join(cwd, projectLocalDirs[tool]);

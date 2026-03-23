@@ -155,7 +155,7 @@ test("resolveWorkflowPath returns project-local workflow directories", () => {
 
   assert.equal(
     resolveWorkflowPath({ tool: "antigravity", location: "project-local", homeDir: "/tmp/h", cwd }),
-    "/tmp/project/.agents/workflows"
+    "/tmp/project/.agent/workflows"
   );
 });
 
