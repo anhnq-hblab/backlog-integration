@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const { installSkill } = require("../src/install");
+const { installSkill, installWorkflows } = require("../src/install");
 
 test("installSkill copies skill assets into destination directory", async () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "bli-install-"));
@@ -69,5 +69,62 @@ test("installSkill replaces existing contents in destination directory", async (
   assert.equal(
     fs.readFileSync(path.join(destDir, "scripts", "backlog_api.py"), "utf8"),
     "new script"
+  );
+});
+
+test("installWorkflows copies .md files into destination directory", async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "bli-wf-"));
+  const assetRoot = path.join(workspace, "skills", "backlog-integration");
+  const workflowSrc = path.join(workspace, "workflows");
+  const destDir = path.join(workspace, "dest-wf");
+
+  fs.mkdirSync(assetRoot, { recursive: true });
+  fs.mkdirSync(workflowSrc, { recursive: true });
+  fs.writeFileSync(path.join(workflowSrc, "auto-bugfix.md"), "---\ndescription: bugfix\n---\n");
+  fs.writeFileSync(path.join(workflowSrc, "not-md.txt"), "ignored");
+
+  const result = await installWorkflows({ assetRoot, destDir });
+
+  assert.equal(result.installed, true);
+  assert.deepEqual(result.files, ["auto-bugfix.md"]);
+  assert.equal(
+    fs.readFileSync(path.join(destDir, "auto-bugfix.md"), "utf8"),
+    "---\ndescription: bugfix\n---\n"
+  );
+  assert.equal(fs.existsSync(path.join(destDir, "not-md.txt")), false);
+});
+
+test("installWorkflows returns gracefully when workflows directory is missing", async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "bli-wf-"));
+  const assetRoot = path.join(workspace, "skills", "backlog-integration");
+  fs.mkdirSync(assetRoot, { recursive: true });
+
+  const result = await installWorkflows({ assetRoot, destDir: path.join(workspace, "dest") });
+
+  assert.equal(result.installed, false);
+  assert.equal(result.reason, "no-workflows-dir");
+});
+
+test("installWorkflows does not delete existing files in destination", async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "bli-wf-"));
+  const assetRoot = path.join(workspace, "skills", "backlog-integration");
+  const workflowSrc = path.join(workspace, "workflows");
+  const destDir = path.join(workspace, "dest-wf");
+
+  fs.mkdirSync(assetRoot, { recursive: true });
+  fs.mkdirSync(workflowSrc, { recursive: true });
+  fs.mkdirSync(destDir, { recursive: true });
+  fs.writeFileSync(path.join(workflowSrc, "auto-bugfix.md"), "new content");
+  fs.writeFileSync(path.join(destDir, "existing.md"), "keep me");
+
+  await installWorkflows({ assetRoot, destDir });
+
+  assert.equal(
+    fs.readFileSync(path.join(destDir, "existing.md"), "utf8"),
+    "keep me"
+  );
+  assert.equal(
+    fs.readFileSync(path.join(destDir, "auto-bugfix.md"), "utf8"),
+    "new content"
   );
 });

@@ -1,0 +1,11 @@
+{
+  "backlog_space": "your-team.backlog.com",
+  "backlog_api_key": "YOUR_API_KEY_HERE",
+  "project_key": "PROJ",
+  "git_host": "github",
+  "git_remote": "origin",
+  "auto_branch": true,
+  "auto_push": true,
+  "log_template": "structured",
+  "report_lang": "vi"
+}

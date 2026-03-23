@@ -1,6 +1,7 @@
 const path = require("node:path");
 
 const SKILL_DIRNAME = "backlog-integration";
+const WORKFLOW_DIRNAME = "workflows";
 
 const TOOL_ALIASES = {
   claude: "claude-code",
@@ -60,6 +61,32 @@ function resolveBaseDir({ tool, location, homeDir, cwd, preferGeminiAntigravity 
   return path.join(homeDir, globalDirs[tool]);
 }
 
+function resolveWorkflowBaseDir({ tool, location, homeDir, cwd, preferGeminiAntigravity }) {
+  if (location === "project-local") {
+    const projectLocalDirs = {
+      "claude-code": ".claude/commands",
+      cursor: ".cursor/workflows",
+      codex: ".codex/workflows",
+      antigravity: ".agents/workflows",
+      opencode: ".opencode/workflows",
+    };
+    return path.join(cwd, projectLocalDirs[tool]);
+  }
+
+  if (tool === "antigravity" && preferGeminiAntigravity) {
+    return path.join(homeDir, ".gemini/antigravity/global_workflows");
+  }
+
+  const globalDirs = {
+    "claude-code": ".claude/commands",
+    cursor: ".cursor/workflows",
+    codex: ".codex/workflows",
+    antigravity: ".agent/workflows",
+    opencode: ".config/opencode/workflows",
+  };
+  return path.join(homeDir, globalDirs[tool]);
+}
+
 function resolveInstallPath({
   tool,
   location,
@@ -80,9 +107,29 @@ function resolveInstallPath({
   return path.join(baseDir, SKILL_DIRNAME);
 }
 
+function resolveWorkflowPath({
+  tool,
+  location,
+  homeDir,
+  cwd,
+  preferGeminiAntigravity = false,
+}) {
+  const normalizedTool = normalizeToolName(tool);
+  const normalizedLocation = normalizeLocation(location);
+  return resolveWorkflowBaseDir({
+    tool: normalizedTool,
+    location: normalizedLocation,
+    homeDir,
+    cwd,
+    preferGeminiAntigravity,
+  });
+}
+
 module.exports = {
   SKILL_DIRNAME,
+  WORKFLOW_DIRNAME,
   normalizeLocation,
   normalizeToolName,
   resolveInstallPath,
+  resolveWorkflowPath,
 };

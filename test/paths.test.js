@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   resolveInstallPath,
+  resolveWorkflowPath,
   normalizeToolName,
   normalizeLocation,
 } = require("../src/paths");
@@ -122,5 +123,51 @@ test("resolveInstallPath can prefer ~/.gemini/antigravity/skills for antigravity
       preferGeminiAntigravity: true,
     }),
     "/tmp/home/.gemini/antigravity/skills/backlog-integration"
+  );
+});
+
+test("resolveWorkflowPath returns global workflow directories", () => {
+  const homeDir = "/tmp/home";
+
+  assert.equal(
+    resolveWorkflowPath({ tool: "claude-code", location: "global", homeDir, cwd: "/tmp/p" }),
+    "/tmp/home/.claude/commands"
+  );
+
+  assert.equal(
+    resolveWorkflowPath({ tool: "cursor", location: "global", homeDir, cwd: "/tmp/p" }),
+    "/tmp/home/.cursor/workflows"
+  );
+
+  assert.equal(
+    resolveWorkflowPath({ tool: "antigravity", location: "global", homeDir, cwd: "/tmp/p" }),
+    "/tmp/home/.agent/workflows"
+  );
+});
+
+test("resolveWorkflowPath returns project-local workflow directories", () => {
+  const cwd = "/tmp/project";
+
+  assert.equal(
+    resolveWorkflowPath({ tool: "claude-code", location: "project-local", homeDir: "/tmp/h", cwd }),
+    "/tmp/project/.claude/commands"
+  );
+
+  assert.equal(
+    resolveWorkflowPath({ tool: "antigravity", location: "project-local", homeDir: "/tmp/h", cwd }),
+    "/tmp/project/.agents/workflows"
+  );
+});
+
+test("resolveWorkflowPath prefers gemini path for antigravity", () => {
+  assert.equal(
+    resolveWorkflowPath({
+      tool: "antigravity",
+      location: "global",
+      homeDir: "/tmp/home",
+      cwd: "/tmp/p",
+      preferGeminiAntigravity: true,
+    }),
+    "/tmp/home/.gemini/antigravity/global_workflows"
   );
 });

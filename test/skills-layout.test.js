@@ -36,4 +36,16 @@ test("skills repo includes examples", () => {
     fs.existsSync(path.join(rootDir, "skills", "backlog-integration", "examples", "sample_bugfix.md")),
     true
   );
+  assert.equal(
+    fs.existsSync(path.join(rootDir, "skills", "backlog-integration", "examples", "backlog.json.template")),
+    true
+  );
+});
+
+test("workflows directory contains auto-bugfix.md", () => {
+  const workflowDir = path.join(__dirname, "..", "workflows");
+  const content = fs.readFileSync(path.join(workflowDir, "auto-bugfix.md"), "utf8");
+
+  assert.equal(fs.existsSync(path.join(workflowDir, "auto-bugfix.md")), true);
+  assert.match(content, /^---\ndescription: /);
 });

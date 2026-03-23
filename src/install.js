@@ -30,6 +30,41 @@ async function installSkill({ assetRoot, destDir }) {
   };
 }
 
+async function installWorkflows({ assetRoot, destDir }) {
+  const workflowSrc = path.join(assetRoot, "..", "..", "workflows");
+
+  let entries;
+  try {
+    entries = await fs.readdir(workflowSrc, { withFileTypes: true });
+  } catch {
+    return { installed: false, destDir, reason: "no-workflows-dir" };
+  }
+
+  const mdFiles = entries.filter(
+    (entry) => entry.isFile() && entry.name.endsWith(".md")
+  );
+
+  if (mdFiles.length === 0) {
+    return { installed: false, destDir, reason: "no-workflow-files" };
+  }
+
+  await fs.mkdir(destDir, { recursive: true });
+
+  for (const entry of mdFiles) {
+    await fs.copyFile(
+      path.join(workflowSrc, entry.name),
+      path.join(destDir, entry.name)
+    );
+  }
+
+  return {
+    installed: true,
+    destDir,
+    files: mdFiles.map((entry) => entry.name),
+  };
+}
+
 module.exports = {
   installSkill,
+  installWorkflows,
 };

@@ -45,7 +45,8 @@
   "files": [
     "bin",
     "src",
-    "skills"
+    "skills",
+    "workflows"
   ],
   "scripts": {
     "test": "node --test",

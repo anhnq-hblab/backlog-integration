@@ -4,11 +4,12 @@ const path = require("node:path");
 const readline = require("node:readline");
 const { stdin, stdout } = require("node:process");
 
-const { installSkill } = require("./install");
+const { installSkill, installWorkflows } = require("./install");
 const {
   normalizeLocation,
   normalizeToolName,
   resolveInstallPath,
+  resolveWorkflowPath,
 } = require("./paths");
 const { createWizardState, reduceWizardState, renderWizard } = require("./wizard");
 
@@ -255,7 +256,22 @@ async function runInstall(options) {
         });
 
     await installSkill({ assetRoot, destDir });
-    console.log(`${tool} (${location}): installed to ${destDir}`);
+    console.log(`${tool} (${location}): skill installed to ${destDir}`);
+
+    const workflowDir = options.dest
+      ? path.resolve(options.dest, "..", "workflows")
+      : resolveWorkflowPath({
+          tool,
+          location,
+          homeDir,
+          cwd: projectPath,
+          preferGeminiAntigravity,
+        });
+
+    const workflowResult = await installWorkflows({ assetRoot, destDir: workflowDir });
+    if (workflowResult.installed) {
+      console.log(`${tool} (${location}): workflows installed to ${workflowDir}`);
+    }
   }
 }
 
