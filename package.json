@@ -7,11 +7,11 @@
   "type": "commonjs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anhnq/backlog-integration-skill.git"
+    "url": "git+https://github.com/anhnq-hblab/backlog-integration.git"
   },
-  "homepage": "https://github.com/anhnq/backlog-integration-skill#readme",
+  "homepage": "https://github.com/anhnq-hblab/backlog-integration#readme",
   "bugs": {
-    "url": "https://github.com/anhnq/backlog-integration-skill/issues"
+    "url": "https://github.com/anhnq-hblab/backlog-integration/issues"
   },
   "skills": {
     "name": "backlog-integration",
