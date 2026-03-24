@@ -99,34 +99,30 @@ mcp_config_check() {
 EOF
 }
 
-mcp_export_env() {
-  # Export env vars from .brain/backlog.json for MCP server
-  local config_file
-  config_file=$(_find_config "${1:-$DEFAULT_CONFIG}") || {
-    echo "❌ Config not found" >&2
-    return 1
-  }
-  
-  export BACKLOG_DOMAIN=$(_read_config_value "$config_file" "backlog_space")
-  export BACKLOG_API_KEY=$(_read_config_value "$config_file" "backlog_api_key")
-  export OPTIMIZE_RESPONSE=1
-  export MAX_TOKENS=10000
-  export ENABLE_TOOLSETS="space,project,issue,git"
-  
-  echo "✅ MCP env vars exported from $config_file"
-}
-
 mcp_start() {
   # Start backlog-mcp-server as background process
   if [[ -n "$MCP_SERVER_PID" ]] && kill -0 "$MCP_SERVER_PID" 2>/dev/null; then
     echo "⚠️  MCP server already running (PID: $MCP_SERVER_PID)"
     return 0
   fi
-  
-  mcp_export_env "${1:-$DEFAULT_CONFIG}" || return 1
+
+  local config_file
+  config_file=$(_find_config "${1:-$DEFAULT_CONFIG}") || {
+    echo "❌ Config not found" >&2
+    return 1
+  }
+
+  local space api_key
+  space=$(_read_config_value "$config_file" "backlog_space")
+  api_key=$(_read_config_value "$config_file" "backlog_api_key")
   
   echo "🚀 Starting backlog-mcp-server..."
-  backlog-mcp-server > "$MCP_LOG_FILE" 2>&1 &
+  env BACKLOG_DOMAIN="$space" \
+      BACKLOG_API_KEY="$api_key" \
+      OPTIMIZE_RESPONSE=1 \
+      MAX_TOKENS=10000 \
+      ENABLE_TOOLSETS="space,project,issue,git" \
+    backlog-mcp-server > "$MCP_LOG_FILE" 2>&1 &
   MCP_SERVER_PID=$!
   
   sleep 1
@@ -168,7 +164,6 @@ mcp_status() {
 # Show usage when sourced
 echo "🤖 MCP Backlog wrapper loaded. Commands:"
 echo "   mcp_config_check  — Validate config + show MCP JSON"
-echo "   mcp_export_env    — Export env vars for MCP server"
-echo "   mcp_start         — Start MCP server"
+echo "   mcp_start         — Start MCP server (reads config directly)"
 echo "   mcp_stop          — Stop MCP server"
 echo "   mcp_status        — Check server status"

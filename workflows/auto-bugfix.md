@@ -90,10 +90,11 @@ Nếu chưa cài:
 npm install -g backlog-mcp-server
 ```
 
-**Config MCP env (tự động từ backlog.json):**
+**Config MCP (tự động từ backlog.json):**
 ```bash
 source ~/.gemini/antigravity/skills/backlog-integration/scripts/mcp_backlog.sh
-mcp_export_env  # Export BACKLOG_DOMAIN, BACKLOG_API_KEY từ .brain/backlog.json
+mcp_config_check   # Validate config + show MCP JSON
+mcp_start          # Start server (reads .brain/backlog.json directly)
 ```
 
 > [!TIP]

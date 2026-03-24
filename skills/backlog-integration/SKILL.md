@@ -50,11 +50,10 @@ Khi cần gọi Backlog API:
 ### Setup
 MCP server đã cài global: `backlog-mcp-server`
 
-Cấu hình qua env vars (đọc từ `.brain/backlog.json`):
+Cấu hình qua config file (đọc từ `.brain/backlog.json`):
 ```bash
 source ~/.gemini/antigravity/skills/backlog-integration/scripts/mcp_backlog.sh
 mcp_config_check    # Show config + MCP JSON
-mcp_export_env      # Export env vars
 ```
 
 Hoặc thêm vào MCP settings (Antigravity/Cursor):
@@ -190,8 +189,7 @@ MCP server wrapper — start/stop/config.
 ```bash
 source scripts/mcp_backlog.sh
 mcp_config_check    # Validate config + show MCP JSON
-mcp_export_env      # Export env vars for MCP server
-mcp_start           # Start MCP server
+mcp_start           # Start MCP server (reads config directly)
 mcp_stop            # Stop MCP server
 mcp_status          # Check server status
 ```
