@@ -1,6 +1,6 @@
 {
   "name": "backlog-integration",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "CLI installer package for the backlog-integration skill.",
   "author": "AnhNQ",
   "license": "MIT",
