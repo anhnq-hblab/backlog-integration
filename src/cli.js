@@ -251,10 +251,6 @@ async function runInstall(options) {
   });
 
   for (const { tool, location } of installs) {
-    const preferGeminiAntigravity =
-      tool === "antigravity" &&
-      fs.existsSync(path.join(homeDir, ".gemini/antigravity/skills")) &&
-      !fs.existsSync(path.join(homeDir, ".agent/skills"));
     const destDir = options.dest
       ? path.resolve(options.dest)
       : resolveInstallPath({
@@ -262,7 +258,6 @@ async function runInstall(options) {
           location,
           homeDir,
           cwd: projectPath,
-          preferGeminiAntigravity,
         });
 
     await installSkill({ assetRoot, destDir });
@@ -275,7 +270,6 @@ async function runInstall(options) {
           location,
           homeDir,
           cwd: projectPath,
-          preferGeminiAntigravity,
         });
 
     const workflowResult = await installWorkflows({ assetRoot, destDir: workflowDir });
