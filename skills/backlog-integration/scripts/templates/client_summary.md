@@ -14,19 +14,23 @@
 ## 3. Ảnh Hưởng
 - **Scope:** {{scope}}
 - **Risk:** {{risk}}
-- **Device:** {{device}}
-- **Regression:** {{regression_risk}}
+- **Side effects:** {{side_effects}}
 
-## 4. Estimate
-- Phân tích: ~{{analysis_time}}
-- Code fix: ~{{fix_time}}
-- Test: ~{{test_time}}
-- **Tổng:** ~{{total_time}}
+## 4. Cross-Project Impact
 
-## 5. PR (Pull Request)
+| Repo | Ảnh hưởng? | Cần fix? | Ghi chú |
+|------|-----------|---------|--------|
+{{cross_project_rows}}
+
+## 5. Estimate
+- **Complexity:** {{complexity}}
+- **Time:** {{estimate_time}}
+
+## 6. PR (Pull Request)
 - **Branch:** `{{branch}}`
 - **PR Link:** {{pr_link}}
 - **Commit:** `{{commit_hash}}`
+- **Changes:** {{changes_summary}}
 - **Backlog:** https://{{backlog_space}}/view/{{issue_key}}
 
 ---

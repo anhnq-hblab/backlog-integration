@@ -141,7 +141,7 @@ class BacklogClient:
                 print(f"WARNING: Failed to download {name}: {e}", file=sys.stderr)
         return downloaded
 
-    def get_issue_with_images(self, issue_key: str, output_dir: str = "Autocode/attachments") -> dict:
+    def get_issue_with_images(self, issue_key: str, output_dir: str = "reports/attachments") -> dict:
         """Fetch issue details + comments + download all screenshots. Returns combined data."""
         issue = self.get_issue(issue_key)
         description = issue.get("description", "")
@@ -379,7 +379,7 @@ def main():
     parser.add_argument("--config", default=".brain/backlog.json", help="Path to config file")
     parser.add_argument("--content", help="Comment content (for add_comment)")
     parser.add_argument("--status-id", type=int, help="Status ID (for update_issue)")
-    parser.add_argument("--output-dir", default="Autocode/attachments",
+    parser.add_argument("--output-dir", default="reports/attachments",
                         help="Output directory for downloaded images")
     parser.add_argument("--template", help="Template name to use for comment")
     parser.add_argument("--data", help="JSON data for template variables")
@@ -434,9 +434,11 @@ def main():
             print(json.dumps(result, indent=2, ensure_ascii=False))
 
         elif args.action == "download_images":
-            downloaded = client.download_images(args.issue, args.output_dir)
+            # Always save to per-issue subfolder: {output_dir}/{issue_key}/
+            issue_dir = os.path.join(args.output_dir, args.issue)
+            downloaded = client.download_images(args.issue, issue_dir)
             print(json.dumps(downloaded, indent=2, ensure_ascii=False))
-            print(f"\n✅ Downloaded {len(downloaded)} image(s) to {args.output_dir}", file=sys.stderr)
+            print(f"\n✅ Downloaded {len(downloaded)} image(s) to {issue_dir}", file=sys.stderr)
 
         elif args.action == "get_issue_with_images":
             result = client.get_issue_with_images(args.issue, args.output_dir)
