@@ -123,7 +123,7 @@ test("resolveWorkflowPath returns global workflow directories", () => {
 
   assert.equal(
     resolveWorkflowPath({ tool: "cursor", location: "global", homeDir, cwd: "/tmp/p" }),
-    "/tmp/home/.cursor/workflows"
+    "/tmp/home/.cursor/commands"
   );
 
   assert.equal(

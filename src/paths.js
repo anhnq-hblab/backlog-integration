@@ -61,7 +61,7 @@ function resolveWorkflowBaseDir({ tool, location, homeDir, cwd }) {
   if (location === "project-local") {
     const projectLocalDirs = {
       "claude-code": ".claude/commands",
-      cursor: ".cursor/workflows",
+      cursor: ".cursor/commands",
       codex: ".codex/workflows",
       antigravity: ".agent/workflows",
       opencode: ".opencode/workflows",
@@ -71,7 +71,7 @@ function resolveWorkflowBaseDir({ tool, location, homeDir, cwd }) {
 
   const globalDirs = {
     "claude-code": ".claude/commands",
-    cursor: ".cursor/workflows",
+    cursor: ".cursor/commands",
     codex: ".codex/workflows",
     antigravity: ".gemini/antigravity/global_workflows",
     opencode: ".config/opencode/workflows",
