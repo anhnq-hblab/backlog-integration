@@ -1,235 +1,138 @@
 ---
 name: backlog-integration
-description: Backlog.com integration — MCP-first with REST fallback, multi-layer review, worktree isolation, state management
+description: Backlog.com integration — installer package, workflow references, and helper scripts
 ---
 
 # Backlog Integration Skill
 
-## Architecture
+## What This Skill Actually Provides
 
+Trong repo/package hien tai, skill nay cung cap:
+- `SKILL.md` de agent tham chieu
+- `scripts/` cho URL parsing, git helpers, va Backlog REST image download
+- workflow markdown `auto-bugfix`
+- CLI installer de copy skill/workflow vao cac AI tools
+
+Skill/package nay khong tu minh dam nhan toan bo orchestration bugfix end-to-end. Cac kha nang nhu MCP issue handling, state resume, subagent review, PR creation, hay report automation phu thuoc vao runtime va tool dang su dung.
+
+## Architecture Boundary
+
+```text
+CLI package (implemented here)
+  ├── install: copy SKILL.md + scripts + workflows
+  ├── setup: generate .brain/backlog.json
+  └── detect: git_host, backlog_space, project_key
+
+Helper scripts (implemented here)
+  ├── scripts/url_parser.py
+  ├── scripts/git_ops.sh
+  └── scripts/backlog_api.py
+
+Workflow/spec layer (documented here, runtime-dependent)
+  ├── MCP tools: get_issue, update_issue, add_issue_comment, ...
+  ├── subagent execution/review
+  ├── state file management
+  └── PR/log/report orchestration
 ```
-MCP backlog-mcp-server (PRIMARY)
-  ├── get_issue, get_issue_comments, add_issue_comment, update_issue
-  ├── get_issues, get_priorities, get_issue_types
-  ├── add_pull_request, get_pull_requests
-  └── get_project, get_project_list
-
-Python REST (SUPPLEMENT — image download only)
-  └── backlog_api.py --action download_images | get_issue_with_images
-
-Git Operations
-  ├── git_ops.sh: create_worktree, cleanup_worktree, commit_changes, push_branch
-  └── url_parser.py: parse issue key / URL
-```
-
-## Execution Modes
-
-Workflow auto-detects capabilities and selects the best mode:
-
-| Mode | MCP | Subagent | Worktree | When |
-|------|-----|----------|----------|------|
-| **full** | Yes | Yes | Yes | Cursor, Antigravity |
-| **mcp_only** | Yes | No | No | Cline, Windsurf basic |
-| **legacy** | No | No | No | ChatGPT, Claude web, no MCP |
-
-Set explicitly in `.brain/backlog.json`:
-```json
-{ "execution_mode": "auto" }
-```
-
-## When to Use
-- User calls `/bugfix` or `/auto-bugfix`
-- Fetching issue info from Backlog
-- Posting structured comments to Backlog issues
-- Batch processing multiple defects
 
 ## Prerequisites
-- **MCP Mode**: `backlog-mcp-server` installed (`npm install -g backlog-mcp-server`)
-- **Legacy Mode**: Python 3.8+ with `requests`
+
+- Node.js 18+
 - Git CLI
-- `.brain/backlog.json` configured
+- Python 3.8+ với `requests` neu dung `backlog_api.py`
+- `backlog-mcp-server` neu runtime cua ban can MCP
+- `.brain/backlog.json` neu workflow can thong tin Backlog
 
----
+## CLI Behavior You Can Rely On
 
-## MCP Tools Reference
+### `install`
 
-| Action | MCP Tool | Replaces |
-|--------|----------|----------|
-| Fetch issue | `get_issue(issueIdOrKey)` | ~~backlog_api.py --action get_issue~~ |
-| List issues | `get_issues(projectId, ...)` | — |
-| Get comments | `get_issue_comments(issueIdOrKey)` | ~~backlog_api.py --action get_comments~~ |
-| Add comment | `add_issue_comment(issueIdOrKey, content)` | ~~backlog_api.py --action add_comment~~ |
-| Update issue | `update_issue(issueIdOrKey, statusId, ...)` | ~~backlog_api.py --action update_issue~~ |
-| Get project | `get_project(projectIdOrKey)` | — |
-| List projects | `get_project_list()` | — |
-| Get PR list | `get_pull_requests(projectIdOrKey, repoIdOrName)` | — |
-| Create PR | `add_pull_request(projectIdOrKey, repoIdOrName, ...)` | `gh pr create` |
-| Get priorities | `get_priorities()` | — |
-| Get issue types | `get_issue_types(projectIdOrKey)` | — |
+`install` se:
+- xoa thu muc skill dich va copy lai tu package
+- copy workflow `.md` vao thu muc workflow/command cua tool
+- ghi de file workflow cung ten neu da ton tai
 
-MCP config:
+`install` se khong:
+- merge custom files trong thu muc skill dich
+- xoa cac workflow cu khac ten
+- sua `.brain/backlog.json`
+
+### `setup`
+
+`setup` se:
+- detect `git_host`, `backlog_space`, `project_key`
+- tao lai `.brain/backlog.json`
+
+`setup` se khong:
+- merge config cu
+- giu lai advanced fields da them tay
+- giu `backlog_api_key` neu khong truyen lai `--api-key`
+
+## Helper Scripts
+
+### `scripts/backlog_api.py`
+
+Vai tro hien tai:
+- download binary attachments/images tu Backlog
+- co fallback `get_issue_with_images` cho mot so tinh huong khong co MCP
+
+Khong nen xem script nay la client day du thay cho MCP trong moi tinh huong.
+
+### `scripts/url_parser.py`
+
+Parse:
+- `PROJ-123`
+- `https://myteam.backlog.com/view/PROJ-123`
+
+### `scripts/git_ops.sh`
+
+Ship cac helper nhu:
+- `create_worktree`
+- `cleanup_worktree`
+- `create_branch`
+- `commit_changes`
+- `push_branch`
+- `merge_worktree`
+
+Day la helper script; runtime co dung hay khong phu thuoc workflow cua tool.
+
+## Workflow-Level Capabilities
+
+Tai lieu trong repo co mo ta cac capability sau:
+- MCP-first fetch/update issue
+- execution modes: `full`, `mcp_only`, `legacy`
+- state management qua `.brain/bugfix_state.json`
+- multi-layer review
+- batch processing
+- report/template generation
+
+Nhung can hieu rang:
+- day la operational guidance cho agent
+- package nay khong enforce hay guarantee cac capability do
+- kha nang thuc thi phu thuoc vao environment ho tro MCP, subagent, image viewing, git hosting, va command execution
+
+## Config Reference
+
+`setup` hien tai tao config co ban:
+
 ```json
 {
-  "mcpServers": {
-    "backlog": {
-      "command": "backlog-mcp-server",
-      "env": {
-        "BACKLOG_DOMAIN": "your-domain.backlog.com",
-        "BACKLOG_API_KEY": "your-api-key",
-        "OPTIMIZE_RESPONSE": "1",
-        "MAX_TOKENS": "5000",
-        "ENABLE_TOOLSETS": "issue,git"
-      }
-    }
-  }
+  "backlog_space": "your-team.backlog.com",
+  "backlog_api_key": "",
+  "project_key": "PROJ",
+  "git_host": "github",
+  "git_remote": "origin",
+  "auto_branch": true,
+  "auto_push": true,
+  "log_template": "structured",
+  "report_lang": "vi"
 }
 ```
 
-Token optimization: set `MAX_TOKENS` to 5000 (sufficient for most issues), enable only needed toolsets.
+Neu workflow cua ban can them field nang cao, hay bo sung thu cong va tranh chay lai `setup` neu chua backup config cu.
 
----
+## Recommended Reading Order
 
-## Python Scripts (Supplement)
-
-### `scripts/backlog_api.py` — Image Downloader
-
-MCP does not support binary attachment downloads. This script handles image/screenshot downloading only.
-
-```bash
-# Download issue images
-python3 scripts/backlog_api.py --action download_images \
-  --issue PROJ-123 --output-dir reports/attachments --config .brain/backlog.json
-
-# Legacy fallback: full issue + images (when MCP unavailable)
-python3 scripts/backlog_api.py --action get_issue_with_images \
-  --issue PROJ-123 --config .brain/backlog.json
-
-# Smoke test
-python3 scripts/backlog_api.py --test --dry-run
-```
-
-### `scripts/url_parser.py` — Input Parser
-
-```bash
-python3 scripts/url_parser.py "PROJ-123"
-python3 scripts/url_parser.py "https://myteam.backlog.com/view/PROJ-123"
-```
-
-### `scripts/git_ops.sh` — Git Operations
-
-```bash
-source scripts/git_ops.sh
-
-# Worktree (recommended — isolated workspace)
-create_worktree "PROJ-123" "cart-total-bug"
-cleanup_worktree "PROJ-123" "cart-total-bug"
-list_worktrees
-merge_worktree "PROJ-123" "cart-total-bug" "develop"
-
-# Legacy branch
-create_branch "PROJ-123" "cart-total-bug"
-
-# Common
-commit_changes "PROJ-123" "fix: recalculate cart total"
-push_branch "origin" "bugfix/PROJ-123-cart-total-bug"
-```
-
----
-
-## Workflow Phases
-
-| Phase | Full Mode | MCP-Only | Legacy |
-|-------|-----------|----------|--------|
-| GD 0: Config | Config + detect + state resume | Config + detect | Config only |
-| GD 1: Fetch | MCP + lazy loading | MCP | Python REST |
-| GD 2: Analyze | Root cause + cross-project | Same | Same |
-| GD 3: Fix | Subagent in worktree | Agent fix direct | Agent fix direct |
-| GD 3.5: Review | 3 parallel subagents | Sequential self-review | Confidence gate |
-| GD 4: Git | Worktree commit/push, ask PR/merge | Branch commit/push | Branch commit/push |
-| GD 5: Log | MCP add_comment + update_issue | MCP | Python REST |
-| GD 6: Report | Template population | Same | Same |
-| GD 7: Batch | Parallel subagents + worktrees | Sequential loop | Sequential loop |
-
----
-
-## State Management
-
-File: `.brain/bugfix_state.json`
-
-Tracks per-issue state for resume after interruption:
-- `agent_phase`: fetch / analyze / fix / review / push / pr_created / logged / blocked
-- `agent_status`: in_progress / approved / completed / blocked
-- `backlog_status`: synced at fix start (statusId: 2) and completion (statusId: 3)
-- `worktree`: path to worktree (full mode)
-- `branch`: git branch name
-- `pr_url`: PR link after creation
-- `errors`: error log for failed phases
-
----
-
-## Multi-Layer Review
-
-Config in `.brain/backlog.json`:
-```json
-{
-  "review_layers": ["code_quality", "test_coverage", "architecture"],
-  "review_max_iterations": 2,
-  "review_skip_for": "LOW"
-}
-```
-
-| Layer | Subagent (full) | Self-review (mcp_only/legacy) |
-|-------|----------------|-------------------------------|
-| Code Quality | `principal-engineer` | Role-play senior reviewer |
-| Test Coverage | `qa-engineer` | Role-play QA engineer |
-| Architecture | `solution-architect` | Role-play architect |
-
-Gate: ALL pass → continue. Warnings → continue + attach to PR. Failures → re-fix (max iterations). Critical → block.
-
----
-
-## Token Optimization
-
-| Strategy | How |
-|----------|-----|
-| MCP response limits | `MAX_TOKENS=5000`, `OPTIMIZE_RESPONSE=1` |
-| Lazy loading | Fetch comments/images only when needed |
-| Context pruning | Summary notes after each phase, drop raw data |
-| Template reduction | Short format for simple bugs, full for complex |
-| Batch budget | Triage first, process by priority, concurrency limit |
-| Caching | Issue summaries cached in state file |
-
-Estimated savings: 50-65% token reduction vs current approach.
-
----
-
-## Templates
-
-| Template | File | Purpose |
-|----------|------|---------|
-| Analysis | `scripts/templates/analysis_comment.md` | Root cause analysis comment |
-| Fix | `scripts/templates/fix_comment.md` | Solution + git reference comment |
-| Full Report | `scripts/templates/client_report.md` | AS-IS / TO-BE client report |
-| Summary | `scripts/templates/client_summary.md` | Quick summary for email/chat |
-| PR | `scripts/templates/pr_description.md` | Pull request description |
-
----
-
-## Config Reference (`.brain/backlog.json`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `backlog_space` | string | required | Backlog domain |
-| `backlog_api_key` | string | required | API key |
-| `project_key` | string | required | Project key |
-| `git_host` | string | required | backlog / github / gitlab |
-| `execution_mode` | string | "auto" | auto / full / mcp_only / legacy |
-| `review_layers` | array | all 3 | code_quality, test_coverage, architecture |
-| `review_max_iterations` | int | 2 | Max re-fix attempts |
-| `review_skip_for` | string | null | Skip review for confidence level |
-| `report_auto` | bool | false | Auto-generate reports |
-| `comment_format` | string | "auto" | auto / full / short |
-| `pr_format` | string | "auto" | auto / short / full |
-| `batch_concurrency` | int | 2 | Max parallel batch issues |
-| `batch_priority_order` | bool | true | Sort batch by priority |
-| `lazy_fetch` | bool | true | Fetch data only when needed |
+1. `README.md` cho package behavior thuc te
+2. `workflows/auto-bugfix.md` cho workflow/spec
+3. `scripts/` neu can hieu utility cu the

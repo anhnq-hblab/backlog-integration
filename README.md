@@ -4,26 +4,30 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 
-Skill tích hợp [Backlog.com](https://backlog.com) cho AI coding tools — tự động fetch bug → phân tích → fix code → push → tạo PR → log kết quả lên Backlog.
+CLI installer package cho skill `backlog-integration` và workflow `auto-bugfix` dùng với các AI coding tools.
+
+Package này hiện tập trung vào 2 việc:
+- cài skill + workflow vào đúng thư mục của tool
+- tạo `.brain/backlog.json` từ thông tin auto-detect được
+
+Package này không trực tiếp thực thi toàn bộ flow bugfix end-to-end. Các phần như MCP orchestration, subagent review, state resume, push/PR/log/report nằm ở mức workflow/spec và phụ thuộc vào môi trường chạy thực tế của tool/agent.
 
 Hỗ trợ: **Antigravity** · **Claude Code** · **Cursor** · **Codex** · **OpenCode**
 
-## Tính năng
+## Tính năng hiện có
 
-- 🔌 **MCP-first** — Ưu tiên dùng `backlog-mcp-server`, fallback REST API khi cần
-- 🤖 **Auto-bugfix workflow** — Từ issue key đến PR chỉ 1 lệnh `/auto-bugfix`
-- 🔍 **Auto-detect config** — Tự nhận diện `git_host`, `backlog_space`, `project_key` từ git remote
-- 📦 **Multi-tool installer** — Cài skill + workflow cho 1 hoặc nhiều AI tools cùng lúc
-- 🌳 **Worktree isolation** — Fix bug trong git worktree riêng, không ảnh hưởng branch chính
-- 📝 **Template system** — Report, comment, PR description theo template chuẩn
-- 🔄 **Batch mode** — Fix nhiều bug cùng lúc
+- **Multi-tool installer** cho nhiều AI tools
+- **Interactive wizard** khi chưa truyền đủ `--tool` hoặc `--location`
+- **Project config setup** với auto-detect từ git remote
+- **Copy workflow markdown** vào thư mục workflow/command tương ứng của tool
+- **Bundle scripts** cho parsing URL, git helpers, và REST image download
 
 ## Yêu cầu
 
-- **Node.js** ≥ 18
+- **Node.js** >= 18
 - **Git CLI**
-- **Python 3.8+** với `requests` (cho REST API fallback & image download)
-- (Khuyến nghị) [`backlog-mcp-server`](https://www.npmjs.com/package/backlog-mcp-server):
+- **Python 3.8+** với `requests` nếu bạn dùng `scripts/backlog_api.py`
+- (Khuyến nghị) [`backlog-mcp-server`](https://www.npmjs.com/package/backlog-mcp-server) nếu workflow của bạn dùng MCP
 
 ```bash
 npm install -g backlog-mcp-server
@@ -34,72 +38,69 @@ npm install -g backlog-mcp-server
 ### Bước 1: Install skill + workflows
 
 ```bash
-# Interactive — chọn tool và location bằng wizard
+# Interactive
 npx backlog-integration install
 
-# Non-interactive — chỉ định tool và location
+# Non-interactive
 npx backlog-integration install --tool antigravity --location global
 npx backlog-integration install --tool cursor --location project-local
 npx backlog-integration install --tool all --location global
 ```
 
-**Interactive wizard** sử dụng `Space` để chọn, `↑↓` di chuyển, `←` quay lại, `→` hoặc `Enter` để tiếp tục.
+Interactive wizard dùng `Space` để chọn, `↑↓` để di chuyển, `←` để quay lại, `→` hoặc `Enter` để tiếp tục.
 
 ### Bước 2: Setup config cho project
 
 ```bash
 cd your-project
 
-# Auto-detect config từ git remote
 npx backlog-integration setup
-
-# Hoặc truyền API key luôn
 npx backlog-integration setup --api-key "YOUR_BACKLOG_API_KEY"
 ```
 
-Setup tự động:
-- ✅ Detect `git_host` (github / gitlab / backlog) từ git remote URL
-- ✅ Detect `backlog_space` từ Backlog domain trong remote URL
-- ✅ Detect `project_key` từ branch names
-- ⚠️ `backlog_api_key` — lấy thủ công từ **Profile → API Settings** trên Backlog
+`setup` hiện tại sẽ:
+- detect `git_host` từ git remote
+- detect `backlog_space` từ remote URL nếu là Backlog
+- detect `project_key` từ remote branches hoặc tên thư mục
+- ghi file `.brain/backlog.json`
+- thêm `.brain/` vào `.gitignore` nếu file `.gitignore` đã tồn tại
 
-Config được lưu tại `.brain/backlog.json` và tự thêm `.brain/` vào `.gitignore`.
+## Hành vi ghi đè cần lưu ý
 
-### Phát triển local
+### Khi chạy `install`
+
+- Skill tại thư mục đích sẽ bị xóa và copy lại từ package.
+- Workflow `.md` cùng tên sẽ bị ghi đè bằng bản mới.
+- Workflow cũ không trùng tên sẽ không bị xóa.
+- `.brain/backlog.json` không bị tác động.
+
+Điều này có nghĩa là cập nhật bằng:
 
 ```bash
-git clone https://github.com/anhnq-hblab/backlog-integration.git
-cd backlog-integration
-npm link
-
-# Giờ có thể dùng CLI trực tiếp
-backlog-integration install
-backlog-integration setup
-
-# Gỡ link
-npm unlink -g backlog-integration
+npx backlog-integration@latest install
 ```
 
-## Sử dụng
+sẽ cập nhật skill/workflow, nhưng không cập nhật config project của bạn.
 
-Sau khi install + setup xong, trong AI tool gõ:
+### Khi chạy `setup` lại
 
-```
-/auto-bugfix PROJ-123
-/auto-bugfix https://your-team.backlog.com/view/PROJ-123
-/auto-bugfix PROJ-123 PROJ-456 PROJ-789    # batch mode
-```
+`setup` hiện tại không merge với config cũ. Nó tạo object config mới từ detect/default rồi ghi đè toàn bộ `.brain/backlog.json`.
 
-AI sẽ tự động: **Fetch bug** → **Đọc screenshots** → **Phân tích root cause** → **Fix code** → **Push** → **Tạo PR** → **Log lên Backlog** → **Tạo report**.
+Hệ quả:
+- nếu không truyền lại `--api-key`, `backlog_api_key` sẽ quay về chuỗi rỗng
+- các field nâng cao bạn tự thêm trước đó có thể bị mất
+- các custom chỉnh tay không nằm trong object mặc định sẽ không được giữ lại
 
-## Cấu hình
+Nếu bạn đã chỉnh `.brain/backlog.json` thủ công, hãy backup trước khi chạy lại `setup`.
 
-### `.brain/backlog.json`
+## `.brain/backlog.json`
+
+Output mặc định hiện tại của lệnh `setup`:
 
 ```json
 {
   "backlog_space": "your-team.backlog.com",
-  "backlog_api_key": "YOUR_API_KEY",
+  "backlog_api_key": "",
   "project_key": "PROJ",
   "git_host": "github",
   "git_remote": "origin",
@@ -110,42 +111,17 @@ AI sẽ tự động: **Fetch bug** → **Đọc screenshots** → **Phân tích
 }
 ```
 
-| Field | Mô tả | Auto-detect |
-|-------|--------|:-----------:|
-| `backlog_space` | Domain Backlog (VD: `hblab.backlogtool.com`) | ✅ |
-| `backlog_api_key` | API key từ Backlog Profile → API Settings | ❌ |
-| `project_key` | Mã project trên Backlog (VD: `HBU1895`) | ✅ |
-| `git_host` | `github` / `gitlab` / `backlog` | ✅ |
-| `git_remote` | Git remote name | Mặc định: `origin` |
-| `auto_branch` | Tự tạo branch `bugfix/*` | Mặc định: `true` |
-| `auto_push` | Tự push sau khi fix | Mặc định: `true` |
-| `log_template` | Format log: `structured` | Mặc định: `structured` |
-| `report_lang` | Ngôn ngữ report: `vi` / `en` / `ja` | Mặc định: `vi` |
-
-### Cấu hình nâng cao (trong `.brain/backlog.json`)
-
-| Field | Type | Mặc định | Mô tả |
-|-------|------|----------|-------|
-| `execution_mode` | string | `"auto"` | `auto` / `full` / `mcp_only` / `legacy` |
-| `review_layers` | array | tất cả | `code_quality`, `test_coverage`, `architecture` |
-| `review_max_iterations` | int | `2` | Số lần re-fix tối đa |
-| `review_skip_for` | string | `null` | Bỏ review cho confidence level |
-| `report_auto` | bool | `false` | Tự động tạo report |
-| `comment_format` | string | `"auto"` | `auto` / `full` / `short` |
-| `pr_format` | string | `"auto"` | `auto` / `short` / `full` |
-| `batch_concurrency` | int | `2` | Số issue xử lý song song |
-| `batch_priority_order` | bool | `true` | Sắp xếp batch theo priority |
-| `lazy_fetch` | bool | `true` | Fetch data khi cần |
-
-## Execution Modes
-
-Workflow tự động phát hiện capabilities và chọn mode phù hợp:
-
-| Mode | MCP | Subagent | Worktree | Khi nào |
-|------|:---:|:--------:|:--------:|---------|
-| **full** | ✅ | ✅ | ✅ | Cursor, Antigravity |
-| **mcp_only** | ✅ | ❌ | ❌ | Cline, Windsurf basic |
-| **legacy** | ❌ | ❌ | ❌ | ChatGPT, Claude web, không có MCP |
+| Field | Mô tả | Nguồn |
+|-------|-------|-------|
+| `backlog_space` | Domain Backlog | Detect từ remote URL, fallback default |
+| `backlog_api_key` | API key Backlog | Chỉ có khi truyền `--api-key`, nếu không là rỗng |
+| `project_key` | Mã project | Detect từ remote branches hoặc tên thư mục |
+| `git_host` | `github` / `gitlab` / `backlog` | Detect từ remote URL, fallback `github` |
+| `git_remote` | Git remote name | Cố định là `origin` |
+| `auto_branch` | Cờ mặc định cho workflow/spec | Ghi sẵn bởi `setup` |
+| `auto_push` | Cờ mặc định cho workflow/spec | Ghi sẵn bởi `setup` |
+| `log_template` | Format log mặc định | Ghi sẵn bởi `setup` |
+| `report_lang` | Ngôn ngữ report | Ghi sẵn bởi `setup` |
 
 ## Công cụ được hỗ trợ
 
@@ -153,43 +129,70 @@ Workflow tự động phát hiện capabilities và chọn mode phù hợp:
 |---------|-------------|----------------|
 | Antigravity | `~/.gemini/antigravity/skills/` | `~/.gemini/antigravity/global_workflows/` |
 | Claude Code | `~/.claude/skills/` | `~/.claude/commands/` |
-| Cursor | `~/.cursor/skills/` | `~/.cursor/workflows/` |
+| Cursor | `~/.cursor/skills/` | `~/.cursor/commands/` |
 | Codex | `~/.codex/skills/` | `~/.codex/workflows/` |
 | OpenCode | `~/.config/opencode/skills/` | `~/.config/opencode/workflows/` |
 
+Project-local:
+
+| Công cụ | Skills path | Workflows path |
+|---------|-------------|----------------|
+| Antigravity | `.agent/skills/` | `.agent/workflows/` |
+| Claude Code | `.claude/skills/` | `.claude/commands/` |
+| Cursor | `.cursor/skills/` | `.cursor/commands/` |
+| Codex | `.codex/skills/` | `.codex/workflows/` |
+| OpenCode | `.opencode/skills/` | `.opencode/workflows/` |
+
 ## Thành phần được cài đặt
 
-### Skills (`skills/backlog-integration/`)
+Khi chạy `install`, package hiện cài:
 
-| File | Mô tả |
-|------|-------|
-| `SKILL.md` | Hướng dẫn & architecture reference cho AI |
-| `scripts/backlog_api.py` | REST API client — image download & legacy fallback |
-| `scripts/url_parser.py` | Parse issue key / URL từ Backlog |
-| `scripts/git_ops.sh` | Git operations — worktree, branch, commit, push |
-| `scripts/mcp_backlog.sh` | MCP server launcher |
-| `scripts/templates/` | Templates cho comment, report, PR description |
-| `examples/` | Config templates & sample bugfix report |
+- `SKILL.md`
+- toàn bộ thư mục `scripts/`
+- các file `.md` trong thư mục repo `workflows/`
 
-### Templates
+Lưu ý:
+- thư mục `examples/` có trong package source nhưng không được copy vào thư mục cài đặt
+- workflow được copy như file markdown; việc tool có nạp và chạy đúng command hay không còn phụ thuộc vào tool đó
 
-| Template | File | Mục đích |
-|----------|------|----------|
-| Analysis comment | `analysis_comment.md` | Root cause analysis trên Backlog |
-| Fix comment | `fix_comment.md` | Code fix + git reference trên Backlog |
-| Client report | `client_report.md` | AS-IS / TO-BE report đầy đủ |
-| Client summary | `client_summary.md` | Tóm tắt cho email/chat |
-| PR description | `pr_description.md` | Mô tả Pull Request |
+## Workflow và capability ở mức spec
 
-### Workflows
+Repo có tài liệu workflow `auto-bugfix` và skill reference mô tả các khả năng như:
+- MCP-first issue handling
+- state resume qua `.brain/bugfix_state.json`
+- worktree/subagent review nhiều lớp
+- auto comment, update issue, PR, report
 
-| File | Command | Mô tả |
-|------|---------|-------|
-| `auto-bugfix.md` | `/auto-bugfix` | Full auto-bugfix workflow |
+Các mục này nên được hiểu là:
+- hướng dẫn vận hành cho agent/tooling
+- capability mong muốn của workflow
+- không phải toàn bộ đều được CLI package này tự thực thi
+
+## Scripts đi kèm
+
+| File | Vai trò hiện tại |
+|------|------------------|
+| `scripts/backlog_api.py` | REST helper cho image download và fallback `get_issue_with_images` |
+| `scripts/url_parser.py` | Parse issue key / Backlog URL |
+| `scripts/git_ops.sh` | Helper cho worktree/branch/commit/push |
+| `scripts/mcp_backlog.sh` | Script hỗ trợ MCP cũ, hiện được ghi chú là deprecated |
+
+## Sử dụng sau khi cài
+
+Sau khi install + setup xong, workflow trong tool của bạn có thể dùng các lệnh kiểu:
+
+```text
+/auto-bugfix PROJ-123
+/auto-bugfix https://your-team.backlog.com/view/PROJ-123
+```
+
+Nhưng cần phân biệt:
+- package này chỉ cài skill/workflow/config
+- việc command có chạy được hay không phụ thuộc vào tool đích và cách tool đó thực thi workflow markdown
 
 ## CLI Reference
 
-```
+```text
 backlog-integration <command> [options]
 
 Commands:
@@ -205,13 +208,30 @@ Options:
   --api-key       Backlog API key (cho lệnh setup)
 ```
 
+## Phát triển local
+
+```bash
+git clone https://github.com/anhnq-hblab/backlog-integration.git
+cd backlog-integration
+npm link
+
+backlog-integration install
+backlog-integration setup
+
+npm unlink -g backlog-integration
+```
+
 ## Cập nhật
 
 ```bash
 npx backlog-integration@latest install
 ```
 
-> **Lưu ý:** Config `.brain/backlog.json` không bị ảnh hưởng khi cập nhật.
+Kỳ vọng đúng với version hiện tại:
+- skill sẽ được thay bằng bản mới
+- workflow cùng tên sẽ được cập nhật
+- config `.brain/backlog.json` không đổi
+- nếu muốn regenerate config thì phải chạy `setup`, và việc đó có thể ghi đè config cũ
 
 ## Development
 

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backlog Integration Guide</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --panel: rgba(255, 250, 242, 0.9);
+      --ink: #1f1a17;
+      --muted: #5d5248;
+      --accent: #0f766e;
+      --accent-2: #b45309;
+      --border: rgba(31, 26, 23, 0.12);
+      --shadow: 0 18px 60px rgba(73, 52, 32, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.16), transparent 28%),
+        radial-gradient(circle at right 20%, rgba(180, 83, 9, 0.14), transparent 24%),
+        linear-gradient(135deg, #efe6d6, #f8f4ec 45%, #e8efe8);
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 64px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 32px;
+      align-items: stretch;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(40px) scale(0.98);
+      transition: opacity 320ms ease, transform 320ms ease;
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) scale(1);
+    }
+
+    .panel,
+    .aside {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .panel {
+      padding: 42px;
+    }
+
+    .aside {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    h1, h2 {
+      margin: 0 0 18px;
+      line-height: 1.05;
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: clamp(42px, 6vw, 74px);
+      max-width: 10ch;
+    }
+
+    h2 {
+      font-size: clamp(32px, 4vw, 52px);
+    }
+
+    p {
+      margin: 0 0 14px;
+      line-height: 1.55;
+      font-size: clamp(18px, 2vw, 23px);
+      color: var(--muted);
+    }
+
+    ul {
+      margin: 18px 0 0;
+      padding-left: 24px;
+      color: var(--ink);
+      font-size: clamp(18px, 1.9vw, 23px);
+      line-height: 1.55;
+    }
+
+    li + li {
+      margin-top: 10px;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.9em;
+      background: rgba(15, 118, 110, 0.09);
+      padding: 0.1em 0.35em;
+      border-radius: 6px;
+    }
+
+    pre {
+      margin: 0;
+      padding: 18px 20px;
+      border-radius: 18px;
+      background: #1f2937;
+      color: #f9fafb;
+      overflow: auto;
+      font-size: 15px;
+      line-height: 1.5;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(180, 83, 9, 0.12);
+      color: var(--accent-2);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .note {
+      border-left: 4px solid var(--accent-2);
+      padding-left: 16px;
+      color: var(--ink);
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .progress {
+      position: fixed;
+      left: 32px;
+      right: 32px;
+      bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 10;
+    }
+
+    .bar {
+      flex: 1;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(31, 26, 23, 0.12);
+      overflow: hidden;
+    }
+
+    .bar > div {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 240ms ease;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      background: var(--ink);
+      color: #fffaf4;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .card {
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid var(--border);
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 18px;
+    }
+
+    @media (max-width: 920px) {
+      body {
+        overflow: auto;
+      }
+
+      .deck {
+        height: auto;
+      }
+
+      .slide {
+        position: static;
+        min-height: 100vh;
+        opacity: 1;
+        pointer-events: auto;
+        transform: none;
+        grid-template-columns: 1fr;
+        padding: 24px;
+      }
+
+      .slide:not(.active) {
+        display: none;
+      }
+
+      .panel,
+      .aside {
+        padding: 24px;
+      }
+
+      .progress {
+        position: sticky;
+        bottom: 0;
+        padding-bottom: 12px;
+        background: linear-gradient(180deg, rgba(244, 239, 230, 0), rgba(244, 239, 230, 0.94) 35%);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section class="slide active">
+      <div class="panel">
+        <div class="eyebrow">Backlog Integration</div>
+        <h1>Huong dan dung dung voi thuc te hien tai</h1>
+        <p>Slide nay tom tat package <code>backlog-integration</code> theo implementation hien co trong repo, khong theo version “mong muon” cua workflow.</p>
+        <p>Tap trung vao 4 cau hoi: cai gi, setup gi, update ra sao, va co gi de bi ghi de.</p>
+      </div>
+      <aside class="aside">
+        <div>
+          <span class="badge">End-user guide</span>
+        </div>
+        <div class="note">
+          Package nay la <strong>installer + config generator</strong>. No khong tu minh chay tron ven quy trinh bugfix Backlog.
+        </div>
+        <div class="meta">
+          <span>Phim mui ten de chuyen slide</span>
+          <span>1 / 7</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="slide">
+      <div class="panel">
+        <div class="eyebrow">Package scope</div>
+        <h2>Package nay lam duoc gi</h2>
+        <ul>
+          <li>Install <code>SKILL.md</code> va toan bo thu muc <code>scripts/</code> vao tool dich.</li>
+          <li>Copy cac workflow markdown trong repo vao thu muc workflow/command cua tool.</li>
+          <li>Tao <code>.brain/backlog.json</code> tu thong tin detect duoc.</li>
+          <li>Ship cac utility scripts cho parse URL, git helper, va image download.</li>
+        </ul>
+      </div>
+      <aside class="aside">
+        <div class="grid">
+          <div class="card">
+            <strong>Khong bao gom</strong>
+            MCP orchestration, subagent review, state resume, auto PR, auto report.
+          </div>
+          <div class="card">
+            <strong>Y nghia</strong>
+            Cac phan tren co the nam trong workflow/spec, nhung khong phai code CLI dang thuc thi.
+          </div>
+        </div>
+        <div class="meta">
+          <span>Scope thatuc te</span>
+          <span>2 / 7</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="slide">
+      <div class="panel">
+        <div class="eyebrow">Install</div>
+        <h2>Cai skill va workflow</h2>
+        <pre><code>npx backlog-integration install
+
+npx backlog-integration install --tool codex --location global
+npx backlog-integration install --tool cursor --location project-local
+npx backlog-integration install --tool all --location global</code></pre>
+        <p>Neu thieu <code>--tool</code> hoac <code>--location</code>, CLI mo interactive wizard.</p>
+      </div>
+      <aside class="aside">
+        <div class="grid">
+          <div class="card">
+            <strong>Global paths</strong>
+            Claude: <code>~/.claude/skills</code><br>
+            Codex: <code>~/.codex/skills</code><br>
+            Antigravity: <code>~/.gemini/antigravity/skills</code>
+          </div>
+          <div class="card">
+            <strong>Project-local</strong>
+            Claude: <code>.claude/skills</code><br>
+            Codex: <code>.codex/skills</code><br>
+            Antigravity: <code>.agent/skills</code>
+          </div>
+        </div>
+        <div class="meta">
+          <span>Install matrix</span>
+          <span>3 / 7</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="slide">
+      <div class="panel">
+        <div class="eyebrow">Setup</div>
+        <h2>Tao config project</h2>
+        <pre><code>cd your-project
+npx backlog-integration setup
+npx backlog-integration setup --api-key "YOUR_BACKLOG_API_KEY"</code></pre>
+        <p><code>setup</code> detect <code>git_host</code>, <code>backlog_space</code>, <code>project_key</code>, sau do ghi file <code>.brain/backlog.json</code>.</p>
+      </div>
+      <aside class="aside">
+        <div class="grid">
+          <div class="card">
+            <strong>Ghi chu</strong>
+            Neu co <code>.gitignore</code>, CLI se them <code>.brain/</code> neu chua co.
+          </div>
+          <div class="card">
+            <strong>Mac dinh hien tai</strong>
+            <code>backlog_api_key</code> la chuoi rong neu ban khong truyen <code>--api-key</code>.
+          </div>
+        </div>
+        <div class="meta">
+          <span>Config generation</span>
+          <span>4 / 7</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="slide">
+      <div class="panel">
+        <div class="eyebrow">Overwrite rules</div>
+        <h2>Khi nao thong tin cu bi ghi de</h2>
+        <ul>
+          <li><code>install</code> xoa thu muc skill dich va copy lai ban moi.</li>
+          <li><code>install</code> chi ghi de workflow cung ten; workflow cu khac ten van con.</li>
+          <li><code>install</code> khong sua <code>.brain/backlog.json</code>.</li>
+          <li><code>setup</code> ghi de toan bo <code>.brain/backlog.json</code> bang config moi.</li>
+        </ul>
+      </div>
+      <aside class="aside">
+        <div class="note">
+          Nguy co lon nhat hien nay: chay lai <code>setup</code> co the lam mat <code>backlog_api_key</code> va cac field nang cao ban da them tay.
+        </div>
+        <div class="card">
+          <strong>Khuyen nghi</strong>
+          Backup <code>.brain/backlog.json</code> truoc khi regenerate config.
+        </div>
+        <div class="meta">
+          <span>Day la diem hay nham</span>
+          <span>5 / 7</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="slide">
+      <div class="panel">
+        <div class="eyebrow">Update</div>
+        <h2>Cap nhat dung cach</h2>
+        <pre><code>npx backlog-integration@latest install</code></pre>
+        <p>Lenh nay phu hop khi ban muon cap nhat skill/workflow da cai.</p>
+        <ul>
+          <li>Skill duoc thay bang ban moi.</li>
+          <li>Workflow cung ten duoc cap nhat.</li>
+          <li>Config project giu nguyen.</li>
+        </ul>
+      </div>
+      <aside class="aside">
+        <div class="card">
+          <strong>Neu muon cap nhat config</strong>
+          Ban phai chay <code>setup</code> rieng, va viec do khong an toan neu config da duoc custom.
+        </div>
+        <div class="card">
+          <strong>Dung ky vong</strong>
+          Update package khong co nghia la merge hay migrate config cu.
+        </div>
+        <div class="meta">
+          <span>Update reality</span>
+          <span>6 / 7</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="slide">
+      <div class="panel">
+        <div class="eyebrow">Workflow vs CLI</div>
+        <h2>Doc docs sao cho khong bi lech ky vong</h2>
+        <ul>
+          <li><code>README.md</code> la noi mo ta package behavior dang co that.</li>
+          <li><code>workflows/auto-bugfix.md</code> la workflow/spec cho runtime co du capability.</li>
+          <li><code>skills/backlog-integration/SKILL.md</code> la bridge giua implementation package va workflow guidance.</li>
+        </ul>
+        <p>Neu mot tinh nang nghe rat “auto”, hay kiem tra xem do la code CLI hay chi la workflow expectation.</p>
+      </div>
+      <aside class="aside">
+        <div class="note">
+          Quy tac de nho: <strong>README = implementation thatuc te</strong>, <strong>workflow/SKILL = cach agent co the van hanh</strong>.
+        </div>
+        <div class="meta">
+          <span>Hoan tat</span>
+          <span>7 / 7</span>
+        </div>
+      </aside>
+    </section>
+  </div>
+
+  <div class="progress">
+    <div class="bar"><div id="bar-fill"></div></div>
+    <div class="controls">
+      <button id="prev">Prev</button>
+      <button id="next">Next</button>
+    </div>
+  </div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const prev = document.getElementById("prev");
+    const next = document.getElementById("next");
+    const fill = document.getElementById("bar-fill");
+    let index = 0;
+
+    function render() {
+      slides.forEach((slide, i) => {
+        slide.classList.toggle("active", i === index);
+      });
+      prev.disabled = index === 0;
+      next.disabled = index === slides.length - 1;
+      fill.style.width = `${((index + 1) / slides.length) * 100}%`;
+    }
+
+    prev.addEventListener("click", () => {
+      index = Math.max(0, index - 1);
+      render();
+    });
+
+    next.addEventListener("click", () => {
+      index = Math.min(slides.length - 1, index + 1);
+      render();
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "PageDown") {
+        index = Math.min(slides.length - 1, index + 1);
+        render();
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        index = Math.max(0, index - 1);
+        render();
+      }
+      if (event.key === "Home") {
+        index = 0;
+        render();
+      }
+      if (event.key === "End") {
+        index = slides.length - 1;
+        render();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
