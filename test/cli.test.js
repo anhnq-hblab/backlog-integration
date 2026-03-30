@@ -1,5 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 
 const {
   buildInstallMatrix,
@@ -150,4 +154,38 @@ test("runInteractiveWizard pauses input after completing", async () => {
   assert.equal(input.paused, true);
   assert.deepEqual(input.setRawModeCalls, [true, false]);
   assert.ok(writes.length > 0);
+});
+
+test("install honors --project-path for project-local installs", () => {
+  const callerDir = fs.mkdtempSync(path.join(os.tmpdir(), "bli-caller-"));
+  const targetDir = fs.mkdtempSync(path.join(os.tmpdir(), "bli-target-"));
+  const cliPath = path.join(__dirname, "..", "bin", "backlog-integration.js");
+
+  execFileSync(
+    process.execPath,
+    [
+      cliPath,
+      "install",
+      "--tool",
+      "codex",
+      "--location",
+      "project-local",
+      "--project-path",
+      targetDir,
+    ],
+    {
+      cwd: callerDir,
+      stdio: "pipe",
+    }
+  );
+
+  assert.equal(
+    fs.existsSync(path.join(targetDir, ".codex", "skills", "backlog-integration", "SKILL.md")),
+    true
+  );
+  assert.equal(
+    fs.existsSync(path.join(targetDir, ".codex", "workflows", "auto-bugfix.md")),
+    true
+  );
+  assert.equal(fs.existsSync(path.join(callerDir, ".codex")), false);
 });

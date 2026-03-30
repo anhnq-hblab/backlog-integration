@@ -11,6 +11,7 @@ Trong repo/package hien tai, skill nay cung cap:
 - `SKILL.md` de agent tham chieu
 - `scripts/` cho URL parsing, git helpers, va Backlog REST image download
 - workflow markdown `auto-bugfix`
+- workflow markdown `auto-bugfix-sheet` (Google Sheets context, no Backlog)
 - CLI installer de copy skill/workflow vao cac AI tools
 
 Skill/package nay khong tu minh dam nhan toan bo orchestration bugfix end-to-end. Cac kha nang nhu MCP issue handling, state resume, subagent review, PR creation, hay report automation phu thuoc vao runtime va tool dang su dung.
@@ -78,6 +79,17 @@ Vai tro hien tai:
 
 Khong nen xem script nay la client day du thay cho MCP trong moi tinh huong.
 
+### `scripts/sheets_api.py`
+
+Vai tro hien tai:
+- doc bug context tu Google Sheets theo `row_number` hoac `bug_id`
+- map row sang normalized object de agent phan tich/sua bug
+- ho tro auth `service_account` (khuyen nghi)
+
+Luu y:
+- can cau hinh `.brain/google_sheets.json`
+- can share sheet cho service account email neu sheet private
+
 ### `scripts/url_parser.py`
 
 Parse:
@@ -105,6 +117,7 @@ Tai lieu trong repo co mo ta cac capability sau:
 - multi-layer review
 - batch processing
 - report/template generation
+- Google Sheets row-context bugfix mode (khong dung Backlog)
 
 Nhung can hieu rang:
 - day la operational guidance cho agent
@@ -135,4 +148,5 @@ Neu workflow cua ban can them field nang cao, hay bo sung thu cong va tranh chay
 
 1. `README.md` cho package behavior thuc te
 2. `workflows/auto-bugfix.md` cho workflow/spec
+3. `workflows/auto-bugfix-sheet.md` cho workflow doc bug context tu Google Sheets
 3. `scripts/` neu can hieu utility cu the

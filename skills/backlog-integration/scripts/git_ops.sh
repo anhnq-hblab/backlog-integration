@@ -149,11 +149,6 @@ merge_worktree() {
     local branch_name
     branch_name=$(_build_branch_name "$issue_key" "$slug")
 
-    check_not_protected_branch "$target" && {
-        echo -e "${RED}Cannot merge to protected branch '${target}' via this helper.${NC}" >&2
-        return 1
-    } || true
-
     local current_branch
     current_branch=$(git branch --show-current)
 
@@ -301,7 +296,7 @@ get_last_commit_hash() {
 # If run directly (not sourced), show help
 # =============================================================================
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ -n "${BASH_SOURCE:-}" && "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Git Operations for /bugfix Workflow"
     echo ""
     echo "Usage: source git_ops.sh"

@@ -240,7 +240,9 @@ function buildInstallMatrix({ tools, locations }) {
 async function runInstall(options) {
   const assetRoot = path.resolve(__dirname, "..", "skills", "backlog-integration");
   const homeDir = os.homedir();
-  const projectPath = path.resolve(process.cwd());
+  const projectPath = options["project-path"]
+    ? path.resolve(options["project-path"])
+    : path.resolve(process.cwd());
   const installs = buildInstallMatrix({
     tools: options.tools || resolveTools(options.tool),
     locations:

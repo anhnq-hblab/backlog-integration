@@ -1,3 +1,6 @@
 # Downloaded attachments from Backlog (bugfix workflow)
 attachments/
 .cursor/
+.omx/
+.codex/
+.kilocode/

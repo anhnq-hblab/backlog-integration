@@ -9,6 +9,7 @@ test("skills.sh-compatible skill assets exist under skills/backlog-integration",
 
   assert.equal(fs.existsSync(path.join(skillDir, "SKILL.md")), true);
   assert.equal(fs.existsSync(path.join(skillDir, "scripts", "backlog_api.py")), true);
+  assert.equal(fs.existsSync(path.join(skillDir, "scripts", "sheets_api.py")), true);
   assert.equal(fs.existsSync(path.join(skillDir, "scripts", "url_parser.py")), true);
   assert.equal(fs.existsSync(path.join(skillDir, "scripts", "git_ops.sh")), true);
   assert.equal(fs.existsSync(path.join(skillDir, "scripts", "mcp_backlog.sh")), true);
@@ -40,6 +41,10 @@ test("skills repo includes examples", () => {
     fs.existsSync(path.join(rootDir, "skills", "backlog-integration", "examples", "backlog.json.template")),
     true
   );
+  assert.equal(
+    fs.existsSync(path.join(rootDir, "skills", "backlog-integration", "examples", "google_sheets.json.template")),
+    true
+  );
 });
 
 test("workflows directory contains auto-bugfix.md", () => {
@@ -47,5 +52,13 @@ test("workflows directory contains auto-bugfix.md", () => {
   const content = fs.readFileSync(path.join(workflowDir, "auto-bugfix.md"), "utf8");
 
   assert.equal(fs.existsSync(path.join(workflowDir, "auto-bugfix.md")), true);
+  assert.match(content, /^---\ndescription: /);
+});
+
+test("workflows directory contains auto-bugfix-sheet.md", () => {
+  const workflowDir = path.join(__dirname, "..", "workflows");
+  const content = fs.readFileSync(path.join(workflowDir, "auto-bugfix-sheet.md"), "utf8");
+
+  assert.equal(fs.existsSync(path.join(workflowDir, "auto-bugfix-sheet.md")), true);
   assert.match(content, /^---\ndescription: /);
 });

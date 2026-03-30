@@ -1,0 +1,19 @@
+{
+  "google_auth_mode": "service_account",
+  "google_service_account_json": "/absolute/path/to/service-account.json",
+  "default_sheet_name": "bugs",
+  "column_mapping": {
+    "bug_id": "Bug ID",
+    "title": "Title",
+    "description": "Description",
+    "steps_to_reproduce": "Steps",
+    "expected_result": "Expected",
+    "actual_result": "Actual",
+    "severity": "Severity",
+    "priority": "Priority",
+    "module": "Module",
+    "attachments": "Attachments",
+    "notes": "Notes"
+  }
+}
+

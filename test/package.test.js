@@ -1,7 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
+const { execFileSync, spawnSync } = require("node:child_process");
 
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")
@@ -35,4 +37,17 @@ test("README documents usage and publish flow", () => {
   assert.match(readme, /npm publish --access public/);
   assert.match(readme, /npx.*install/);
   assert.match(readme, /npx.*setup/);
+});
+
+test("npm pack excludes Python cache artifacts", () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "bli-npm-cache-"));
+  const result = spawnSync("npm", ["pack", "--dry-run", "--cache", cacheDir], {
+    cwd: path.join(__dirname, ".."),
+    encoding: "utf8",
+  });
+  const output = `${result.stdout}${result.stderr}`;
+
+  assert.equal(result.status, 0);
+  assert.doesNotMatch(output, /__pycache__/);
+  assert.doesNotMatch(output, /\.pyc/);
 });

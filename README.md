@@ -27,6 +27,7 @@ Hỗ trợ: **Antigravity** · **Claude Code** · **Cursor** · **Codex** · **O
 - **Node.js** >= 18
 - **Git CLI**
 - **Python 3.8+** với `requests` nếu bạn dùng `scripts/backlog_api.py`
+- **Python 3.8+** với `google-api-python-client` + `google-auth` nếu bạn dùng `scripts/sheets_api.py`
 - (Khuyến nghị) [`backlog-mcp-server`](https://www.npmjs.com/package/backlog-mcp-server) nếu workflow của bạn dùng MCP
 
 ```bash
@@ -173,9 +174,53 @@ Các mục này nên được hiểu là:
 | File | Vai trò hiện tại |
 |------|------------------|
 | `scripts/backlog_api.py` | REST helper cho image download và fallback `get_issue_with_images` |
+| `scripts/sheets_api.py` | Google Sheets helper để đọc bug context theo `row_number` hoặc `bug_id` |
 | `scripts/url_parser.py` | Parse issue key / Backlog URL |
 | `scripts/git_ops.sh` | Helper cho worktree/branch/commit/push |
 | `scripts/mcp_backlog.sh` | Script hỗ trợ MCP cũ, hiện được ghi chú là deprecated |
+
+## Google Sheets mode (không dùng Backlog)
+
+Ngoài workflow Backlog, package có thể ship workflow đọc context bug từ Google Sheets:
+
+- `workflows/auto-bugfix-sheet.md`
+- `scripts/sheets_api.py`
+
+Flow mục tiêu:
+1. User paste Google Sheet link + sheet/tab + row selector (`row_number` hoặc `bug_id`)
+2. Runtime đọc row thành context chuẩn hóa
+3. Agent phân tích bug + sửa code
+4. Report + commit code (không update Backlog)
+
+### Cấu hình auth cho Google Sheets
+
+Tạo file `.brain/google_sheets.json` (tham khảo `skills/backlog-integration/examples/google_sheets.json.template`):
+
+```json
+{
+  "google_auth_mode": "service_account",
+  "google_service_account_json": "/absolute/path/to/service-account.json",
+  "default_sheet_name": "bugs",
+  "column_mapping": {
+    "bug_id": "Bug ID",
+    "title": "Title",
+    "description": "Description",
+    "steps_to_reproduce": "Steps",
+    "expected_result": "Expected",
+    "actual_result": "Actual",
+    "severity": "Severity",
+    "priority": "Priority",
+    "module": "Module",
+    "attachments": "Attachments",
+    "notes": "Notes"
+  }
+}
+```
+
+Lưu ý:
+- Chế độ `service_account` phù hợp automation.
+- Cần share Google Sheet cho email service account để đọc được dữ liệu private.
+- `setup` hiện tại chỉ tạo `.brain/backlog.json`; file Google Sheets config cần tự tạo thủ công.
 
 ## Sử dụng sau khi cài
 
