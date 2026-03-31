@@ -1,718 +1,677 @@
 ---
-description: 🐛 Auto-fix bug từ Backlog.com
+description: Auto-fix bug from Backlog.com — MCP-first agent workflow
 ---
 
-# WORKFLOW: /bugfix - AI Bug Auto-Fix (Backlog Integration)
+# /auto-bugfix — AI Bug Auto-Fix (Backlog Integration)
 
-Bạn là **Antigravity Bug Hunter**. User báo bug từ Backlog.com, bạn tự động lấy thông tin → phân tích → fix → push → log kết quả.
+## QUICK REFERENCE
 
-**Nhiệm vụ:** Tự động hoá toàn bộ quy trình xử lý bug, từ Backlog issue đến code fix + structured logging.
+```
+GD0: Load .brain/backlog.json → detect MCP + subagent → check state resume
+GD1: Parse input → get_issue → check attachments count → get_comments ∥ download_images
+     → ANALYZE images: extract error text, UI elements, visual diff → build keyword list
+GD2: Search codebase → identify root cause → write summary → CONFIDENCE GATE
+     (full mode: parallel search subagents)
+GD3: create_worktree → implement fix → run tests → update state
+GD3.5: Review — 3 parallel subagents: code quality ∥ test ∥ architecture
+GD4: commit → push → create PR → update state
+GD5: MCP add_comment ∥ update_issue (parallel MCP calls)
+GD6: Fill report template → save to reports/
+GD7: (batch) Triage → parallel subagents in worktrees (max concurrency from config)
+```
+
+`∥` = parallel when subagent/concurrent calls available, sequential otherwise.
 
 ---
 
-## Giai đoạn 0: Config Check (Tự động)
+## EXECUTION RULES
 
-### 0.1. Kiểm tra config
-Kiểm tra file `.brain/backlog.json` trong project hiện tại:
+### Tool Priority
 
-```
-Nếu CHƯA CÓ `.brain/backlog.json`:
-→ Chạy guided setup (xem 0.2)
-→ Lưu config
-→ Tiếp tục Giai đoạn 1
+| Operation | Primary | Fallback (MCP unavailable) |
+|-----------|---------|---------------------------|
+| Fetch/update issue | MCP tools (required) | `backlog_api.py --action get_issue_with_images` |
+| Download images | `backlog_api.py --action download_images` | same |
+| Parse URL/key | `url_parser.py` | manual regex |
+| Git operations | `git_ops.sh` helpers | raw git CLI |
 
-Nếu ĐÃ CÓ:
-→ Load config
-→ Validate bằng schema
-→ Tiếp tục Giai đoạn 1
-```
+**Rule:** If MCP is available, MUST use MCP for issue operations. Never use Python script as primary when MCP is healthy.
 
-### 0.2. Guided Setup (Chạy 1 lần)
+### Execution Modes
 
 ```
-"🔗 Em cần setup Backlog cho project này. Anh cung cấp thông tin nhé!
-
-1. Backlog Space URL: (VD: myteam.backlog.com)
-2. API Key: (Lấy từ Profile → API Settings)
-3. Project Key: (VD: PROJ — mã dự án trên Backlog)
-4. Git Host: Repo code ở đâu?
-   a) Backlog Git
-   b) GitHub
-   c) GitLab
-5. Ngôn ngữ report: ja / en / vi?"
+IF MCP + subagent + worktree → mode = "full"
+IF MCP only                  → mode = "mcp_only"
+IF no MCP                    → mode = "legacy"
 ```
 
-Sau khi thu thập, tạo `.brain/backlog.json`:
+---
+
+## GD 0: Init
+
+### 0.1. Load Config
+
+Read `.brain/backlog.json`. Required fields:
+
 ```json
 {
   "backlog_space": "myteam.backlog.com",
-  "backlog_api_key": "xxxxxxxxxxxxxxxxxxxx",
+  "backlog_api_key": "...",
   "project_key": "PROJ",
   "git_host": "github",
   "git_remote": "origin",
   "auto_branch": true,
   "auto_push": true,
-  "log_template": "structured",
   "report_lang": "vi"
 }
 ```
 
-> [!IMPORTANT]
-> **API key lưu thẳng trong `backlog.json`** — không dùng `env:` prefix.
-> File `.brain/` được gitignore nên key không bị commit.
-> Điều này tránh việc `export` key trong command line (lộ trong shell history).
+If missing → run `npx backlog-integration setup` or ask user.
 
-Kiểm tra `.brain/` đã được gitignore chưa. Nếu chưa, thêm vào `.gitignore`:
-```
-.brain/
-```
+### 0.2. Resolve Skill Directory
 
-### 0.3. Validate Config
-Sử dụng schema: `~/.gemini/antigravity/schemas/backlog_config.schema.json`
+**Do this before any script call.** Scripts are in the skill install dir, NOT in the user's project.
 
-Kiểm tra:
-- `backlog_space` không rỗng
-- `backlog_api_key` không rỗng và không phải placeholder
-- `git_host` là một trong: `backlog`, `github`, `gitlab`
-- `project_key` match pattern `[A-Z][A-Z0-9_]+`
-
-### 0.4. MCP Server Setup (Khuyến nghị)
-
-Backlog MCP Server cho phép AI gọi Backlog API **trực tiếp** — nhanh hơn 5-10x so với Python REST scripts.
-
-**Kiểm tra MCP server:**
 ```bash
-which backlog-mcp-server  # Check installed
+SKILL_DIR=$(find \
+  "${HOME}/.claude/skills" \
+  "${HOME}/.gemini/antigravity/skills" \
+  "${HOME}/.cursor/skills" \
+  "${HOME}/.codex/skills" \
+  "${HOME}/.config/opencode/skills" \
+  ".claude/skills" ".cursor/skills" ".codex/skills" ".agent/skills" \
+  -name "backlog_api.py" -path "*/backlog-integration/scripts/*" \
+  2>/dev/null | head -1 | xargs dirname)
+
+[ -z "$SKILL_DIR" ] && echo "ERROR: skill not found. Run: npx backlog-integration install" && exit 1
 ```
 
-Nếu chưa cài:
-```bash
-npm install -g backlog-mcp-server
-```
+Use `$SKILL_DIR` for all script calls in this workflow.
 
-**Config MCP (tự động từ backlog.json):**
-```bash
-source ~/.gemini/antigravity/skills/backlog-integration/scripts/mcp_backlog.sh
-mcp_config_check   # Validate config + show MCP JSON
-mcp_start          # Start server (reads .brain/backlog.json directly)
-```
+### 0.3. Detect Capabilities
 
-> [!TIP]
-> MCP Server sẽ được ưu tiên sử dụng ở GĐ 1 (Fetch) và GĐ 5 (Log).
-> Python REST scripts vẫn dùng cho image download (MCP không hỗ trợ).
+Check:
+1. MCP backlog server available? → try a lightweight MCP call
+2. Subagent support? → check runtime capability
+3. Git worktree support? → `git worktree list`
+
+Set `execution_mode` accordingly.
+
+### 0.3. State Resume
+
+Read `.brain/bugfix_state.json`. If issue already has state:
+- Resume from `agent_phase` (skip completed phases)
+- Log: "Resuming {issue_key} from phase {agent_phase}"
+
+If no state file or issue not found → start fresh.
+
+**Output:** `execution_mode`, config loaded, resume point (if any)
 
 ---
 
-## Giai đoạn 1: Fetch Bug Info
+## GD 1: Fetch Bug Info
 
 ### 1.1. Parse Input
 
-**Hỗ trợ nhiều format (single hoặc batch):**
-```
-# Single issue
-/bugfix PROJ-123
-/bugfix https://myteam.backlog.com/view/PROJ-123
-
-# Batch mode — nhiều issues trong 1 prompt
-/bugfix PROJ-123 PROJ-456 PROJ-789
-/bugfix https://myteam.backlog.com/view/PROJ-123
-https://myteam.backlog.com/view/PROJ-456
-https://myteam.backlog.com/view/PROJ-789
-```
-
-Sử dụng skill script `url_parser.py` để parse **từng input**:
 ```bash
-python3 ~/.gemini/antigravity/skills/backlog-integration/scripts/url_parser.py "INPUT"
+python3 "$SKILL_DIR/url_parser.py" "PROJ-123"
+# or
+python3 "$SKILL_DIR/url_parser.py" "https://myteam.backlog.com/view/PROJ-123"
 ```
 
-Output JSON:
-```json
+If multiple issues → go to GD 7 (Batch).
+
+### 1.2. Phased Fetch (Lazy Loading)
+
+**Phase A — Summary only:**
+```
+MCP: get_issue(issueIdOrKey) → title, description, priority, status
+```
+
+Read description. Decide:
+- Description clearly describes the bug with specific error/location → Phase A is sufficient
+- Description vague or references comments → go to Phase B
+- Description contains `#image()` refs → go to Phase C after B
+
+**Phase B+C — Comments and Images:**
+
+**IMPORTANT: Always check for attachments, not just `#image()` refs.**
+Backlog issues with screenshots often have attachments listed separately without `#image()` in the description.
+Check: `description contains #image()` OR `issue has attachments count > 0`.
+
+If both comments and images are needed, run them in parallel:
+
+```
+┌─ mode: full (subagent available) ──────────────────────────┐
+│                                                             │
+│  Subagent 1: MCP get_issue_comments(issueIdOrKey,          │
+│              count=10, order="desc")                        │
+│                                          ← run parallel    │
+│  Subagent 2: python3 "$SKILL_DIR/backlog_api.py"            │
+│              --action download_images --issue PROJ-123      │
+│              --output-dir reports/attachments/              │
+│              --config .brain/backlog.json                   │
+│                                                             │
+│  Wait for both → merge results                             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─ mode: mcp_only / legacy (no subagent) ────────────────────┐
+│  Step B: MCP get_issue_comments (or Python fallback)       │
+│  Step C: download_images (if attachments > 0)              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 1.4. Image Analysis (when images downloaded)
+
+**DO NOT skip this step if images were downloaded.** For UI/frontend bugs especially, screenshots often contain more precise information than the description.
+
+Analyze each downloaded image and extract:
+
+```
+For each image:
+1. ERROR MESSAGES — exact text of any error popup, toast, alert
+2. UI ELEMENTS — component names, button labels, dropdown options visible
+3. URLs/routes — any URL visible in browser address bar
+4. BEFORE/AFTER — if multiple images, identify which shows expected vs actual
+5. KEY DIFFERENCES — if comparing screenshots, list specific differences
+
+Output format (feed directly into GD 2 as search keywords):
 {
-  "space": "myteam.backlog.com",
-  "issue_key": "PROJ-123",
-  "comment_id": null
+  "extracted_keywords": ["suspended", "contract_suspended", "Managed by", "OEM Admin"],
+  "error_messages": ["Your account has been suspended. Please contact admin."],
+  "ui_elements": ["Managed by dropdown", "Organization Admin form"],
+  "routes": ["/admin/users/create", "/admin/users/123/edit"],
+  "visual_diff": "Create form shows [OEM Admin, Agency Admin]; Edit form shows [Agency Admin] only"
 }
 ```
 
-### 1.1.1. Batch Mode Processing
+**Why this matters:** Exact error text → direct grep for i18n keys. Component names → faster file search. Visual diff → confirms root cause before coding.
 
-Nếu phát hiện **nhiều issue keys/URLs** trong input:
+If runtime cannot view images (no multimodal support):
+- Skip image analysis
+- Note in state: `"images_analyzed": false, "reason": "no multimodal support"`
+- Rely on description/comments for keywords only
 
-1. Parse tất cả issues → danh sách `[PROJ-123, PROJ-456, PROJ-789]`
-2. Hiển thị tổng quan:
-```
-"📋 Batch mode: 3 issues detected
-   1. PROJ-123
-   2. PROJ-456
-   3. PROJ-789
+### 1.3. Write Phase Summary
 
-🚀 Bắt đầu xử lý tuần tự..."
-```
-3. **Loop qua từng issue** — chạy full GĐ 1→6:
-   - Checkout `develop` trước mỗi issue
-   - Tạo branch riêng cho mỗi issue
-   - Push + PR + Log + Report cho mỗi issue
-4. Sau mỗi issue, hiển thị progress:
-```
-"✅ [1/3] PROJ-123 — Done (branch: bugfix/PROJ-123-...)
-⏳ [2/3] PROJ-456 — Processing..."
-```
-5. Cuối cùng, hiển thị **batch summary**:
-```
-"🎯 Batch complete! 3/3 issues fixed
-
-| # | Issue | Branch | PR | Status |
-|---|-------|--------|-----|--------|
-| 1 | PROJ-123 | bugfix/PROJ-123-... | #45 | ✅ |
-| 2 | PROJ-456 | bugfix/PROJ-456-... | #46 | ✅ |
-| 3 | PROJ-789 | bugfix/PROJ-789-... | #47 | ⚠️ Complex |
-
-📄 Reports: reports/260319-batch-summary.md"
-```
-
-> [!NOTE]
-> Nếu 1 issue fail (không tìm được root cause, API error...), **skip và tiếp tục** issue tiếp theo.
-> Cuối batch sẽ báo cáo tổng hợp issues nào thành công, issues nào cần xử lý manual.
-
-### 1.2. Fetch từ Backlog API (MCP-First + REST Fallback)
-
-**Ưu tiên MCP Mode** — gọi tools trực tiếp, nhanh và structured:
+Summarize to compact format (keep under 200 tokens). Include image analysis output if available:
 
 ```
-# Step 1: Fetch issue details qua MCP
-get_issue(issueIdOrKey: "PROJ-123")
-→ Trả về: summary, description, priority, status, assignee, created, updated
-
-# Step 2: Fetch comments qua MCP
-get_issue_comments(issueIdOrKey: "PROJ-123")
-→ Trả về: list comments với content, changeLog, attachmentInfo
+Issue: PROJ-123 — "Cart total wrong when discount > 100%"
+Priority: High
+Description hint: discount calculation error
+Images: 2 screenshots
+  → error_text: "NaN" in cart total display
+  → ui_elements: [CartSummary, DiscountInput]
+  → visual_diff: "Normal discount shows correct total; 100% discount shows NaN"
+  → search_keywords: ["cart", "discount", "NaN", "CartSummary", "DiscountInput"]
+Comments: QA confirmed reproducible on staging (comment #5)
+images_analyzed: true
 ```
 
-**Step 3: Download images** (chỉ bước này dùng Python REST):
-```bash
-python3 ~/.gemini/antigravity/skills/backlog-integration/scripts/backlog_api.py \
-  --action download_images \
-  --issue "PROJ-123" \
-  --output-dir Autocode/attachments \
-  --config .brain/backlog.json
-```
-
-> [!NOTE]
-> MCP server không hỗ trợ attachment download, nên image download vẫn dùng Python REST.
-> Tất cả operations khác (get_issue, comments, update) đều qua MCP — nhanh hơn 5-10x.
-
-**Fallback (nếu MCP không available):**
-```bash
-python3 ~/.gemini/antigravity/skills/backlog-integration/scripts/backlog_api.py \
-  --action get_issue_with_images \
-  --issue "PROJ-123" \
-  --output-dir Autocode/attachments \
-  --config .brain/backlog.json
-```
-
-Output chứa:
-- `description` — full markdown description
-- `image_refs` — list filenames referenced in description
-- `downloaded_images` — list `{name, path, id, size}` đã download
-- `matched_images` — images matched to `#image()` refs
-- `image_dir` — path chứa ảnh
-
-### 1.3. AI Đọc Screenshots (NEW)
-
-Sau khi download, **AI phải đọc TẤT CẢ screenshots** trước khi phân tích:
-
-```
-Với mỗi ảnh trong downloaded_images:
-  → Dùng view_file tool để xem ảnh
-  → Mô tả visual: cái gì bị lỗi, UI element nào, trạng thái nào
-  → Xác định: đây là "actual" hay "expected" screenshot
-```
-
-Kết hợp thông tin từ:
-- Description text (mô tả bằng chữ)
-- Screenshots (evidence visual)
-- Comments (discussion, context thêm)
-
-### 1.4. Hiển thị tóm tắt
-
-```
-"📥 **BUG INFO:**
-
-🔑 **Issue:** PROJ-123
-📝 **Title:** Cart total not updating after remove item
-🔴 **Priority:** High
-👤 **Assigned:** Taro Yamada
-📅 **Created:** 2026-03-10
-
-📋 **Description:**
-[Tóm tắt ngắn gọn]
-
-🖼️ **Screenshots:** 3 images
-   1. screenshot-error.png — [Mô tả AI thấy gì trong ảnh]
-   2. expected-behavior.png — [Mô tả AI thấy gì]
-   3. actual-result.png — [Mô tả AI thấy gì]
-
-💬 **Comments:** 3 comments (latest: 2026-03-12)
-
-→ Bắt đầu phân tích root cause..."
+**Write state:**
+```json
+{
+  "PROJ-123": {
+    "agent_phase": "fetch",
+    "agent_status": "completed",
+    "started_at": "...",
+    "updated_at": "..."
+  }
+}
 ```
 
 ---
 
-## Giai đoạn 2: AI Phân Tích Nguyên Nhân (Enhanced)
+## GD 2: Root Cause Analysis
 
-### 2.1. Context Loading (Enhanced)
-AI tự động:
-1. Đọc bug description + tất cả comments
-2. **[NEW] Đọc screenshots bằng `view_file` tool** — mô tả visual bug
-3. **[NEW] So sánh "Actual" vs "Expected" từ ảnh** (nếu có cả 2)
-4. Load `.brain/brain.json` (project context, tech stack, patterns)
-5. Search codebase cho các files liên quan (grep, find)
-6. Nếu có `comment_id` → focus vào comment đó
+### Steps (mode: mcp_only / legacy — sequential)
 
-### 2.2. Root Cause Analysis (Enhanced)
+1. **Build keyword list** from ALL available sources (in priority order):
+   - Image analysis output (if `images_analyzed: true`) → use `extracted_keywords` + `error_messages` + `ui_elements` first
+   - Bug description: function names, error messages, file paths, UI element names
+   - Comments: QA reproduction steps, dev notes
+   - Example for HBU1895-1281: `["contract_suspended", "suspended", "Managed by", "editParentRoles", "ORGANIZATION_ADMIN"]` — most came from screenshots
 
-AI output structured analysis — **phải dựa trên CẢ text + images**:
+2. **Search codebase:** grep keywords → identify top 5 relevant files
+3. **Read affected files:** trace the call chain from entry point to bug location
+4. **Cross-check with visual diff** (if available): confirm root cause matches what screenshots show
+5. **Identify root cause:** write 1-3 sentence explanation
+6. **Assess scope:** list all files that may need changes
+
+### Steps (mode: full — parallel search subagents)
+
+When subagent is available, split search into parallel tracks:
+
+```
+┌─ Subagent A: Image-derived keywords ───────────────────────┐
+│  Input: extracted_keywords + error_messages from GD 1.4    │
+│  grep exact error text, i18n keys, component names         │
+│  → top 3 candidate files                                   │
+│  (skip if images_analyzed: false)                          │
+└─────────────────────────────────────────────────────────────┘
+┌─ Subagent B: Description/comment keywords ─────────────────┐
+│  grep function names, file paths from description/comments  │
+│  → top 3 candidate files                                   │
+└─────────────────────────────────────────────────────────────┘
+┌─ Subagent C: Recent changes search ────────────────────────┐
+│  git log --since="2 weeks" for affected area               │
+│  → recent commits that may have introduced the bug         │
+└─────────────────────────────────────────────────────────────┘
+
+Wait all → merge unique candidate files → read + trace → root cause
+Cross-check: root cause should explain the visual diff from screenshots
+```
+
+This reduces GD 2 wall time by ~60% for complex bugs with multiple search signals.
+Subagent A (image keywords) typically finds the deepest leads for UI/frontend bugs.
+
+### Output — Write to State
+
+```json
+{
+  "PROJ-123": {
+    "agent_phase": "analyze",
+    "agent_status": "completed",
+    "analysis": {
+      "root_cause": "discount_calculator.js:47 — divides by (1 - discount_rate) without checking rate >= 1.0",
+      "affected_files": ["src/cart/discount_calculator.js", "src/cart/cart_total.js"],
+      "confidence": "HIGH",
+      "scope": "narrow"
+    }
+  }
+}
+```
+
+### CONFIDENCE GATE
+
+| Confidence | Action |
+|------------|--------|
+| **HIGH** | Proceed to GD 3 automatically |
+| **MEDIUM** | Show analysis to user, ask "Proceed with fix?" — wait for confirmation |
+| **LOW** | Show analysis to user, explain uncertainty, ask for guidance. Do NOT auto-fix |
+
+---
+
+## GD 3: Auto-Fix
+
+### 3.1. Create Worktree (or Branch)
+
+```bash
+source "$SKILL_DIR/git_ops.sh"
+
+# Preferred — isolated worktree
+create_worktree "PROJ-123" "cart-discount-fix"
+
+# Fallback — standard branch (if worktree not supported)
+create_branch "PROJ-123" "cart-discount-fix"
+```
+
+### 3.2. Implement Fix
+
+1. Navigate to worktree path (if using worktree)
+2. Edit affected files — fix the root cause identified in GD 2
+3. Keep changes minimal and focused on the bug
+4. Do NOT refactor surrounding code or add unrelated improvements
+
+### 3.4. Validate
+
+1. Run project tests: `npm test` / `pytest` / project-specific test command
+2. Run linter if available
+3. Verify the fix addresses the root cause
+
+| Test Result | Action |
+|-------------|--------|
+| All pass | Proceed to GD 3.5 |
+| Tests fail (related to fix) | Fix the failing tests, retry once |
+| Tests fail (unrelated) | Note pre-existing failures, proceed |
+| No test suite | Proceed with warning |
+
+### 3.5. Write State
+
+```json
+{
+  "PROJ-123": {
+    "agent_phase": "fix",
+    "agent_status": "completed",
+    "worktree": ".worktrees/bugfix/PROJ-123-cart-discount-fix",
+    "branch": "bugfix/PROJ-123-cart-discount-fix"
+  }
+}
+```
+
+---
+
+## GD 3.5: Review
+
+### Mode: full (3 parallel review subagents)
+
+```
+┌─ Subagent: Code Quality ───────────────────────────────────┐
+│  Role: senior-reviewer                                     │
+│  Input: diff from GD 3 + root cause from GD 2             │
+│  Check:                                                    │
+│   - Fix addresses root cause (not just symptoms)           │
+│   - No regression risk                                     │
+│   - Edge cases handled (null, empty, boundary)             │
+│   - No hardcoded values or magic numbers                   │
+│  Output: PASS / WARN(reason) / FAIL(reason)                │
+└─────────────────────────────────────────────────────────────┘
+┌─ Subagent: Test Adequacy ──────────────────────────────────┐
+│  Role: qa-engineer                                         │
+│  Input: diff + test results from GD 3.4                    │
+│  Check:                                                    │
+│   - Existing tests still pass                              │
+│   - New test added for bug scenario                        │
+│   - Edge case from root cause is covered                   │
+│  Output: PASS / WARN(missing tests) / FAIL(tests broken)  │
+└─────────────────────────────────────────────────────────────┘
+┌─ Subagent: Architecture Impact ────────────────────────────┐
+│  Role: solution-architect                                  │
+│  Input: diff + affected files list                         │
+│  Check:                                                    │
+│   - Changes scoped to affected files only                  │
+│   - No API contract changes (unless intentional)           │
+│   - No database migration needed                           │
+│  Output: PASS / WARN(broad scope) / FAIL(breaking change)  │
+└─────────────────────────────────────────────────────────────┘
+
+Wait all → merge results into review_result
+```
+
+### Mode: mcp_only / legacy (sequential self-review)
+
+Check all items as a single agent, in order:
+
+- [ ] Fix addresses the root cause (not just symptoms)
+- [ ] No regression risk to existing functionality
+- [ ] Edge cases handled (null, empty, boundary values)
+- [ ] No hardcoded values or magic numbers introduced
+- [ ] Existing tests still pass
+- [ ] New test added for the bug scenario (if test suite exists)
+- [ ] Changes are scoped to affected files only
+- [ ] No API contract changes (unless intentional)
+- [ ] No database migration needed
+
+### Review Gate
+
+| Result | Action |
+|--------|--------|
+| All PASS | Proceed to GD 4 |
+| Any WARN | Proceed, attach warnings to PR description |
+| Any FAIL | Go back to GD 3.3, fix issues (max 1 retry) |
+| Critical / multiple FAIL | Stop, report to user |
+
+---
+
+## GD 4: Git + PR
+
+### 4.1. Commit
+
+```bash
+source "$SKILL_DIR/git_ops.sh"
+commit_changes "PROJ-123" "fix: resolve cart total NaN when discount >= 100%" --backlog-keywords
+```
+
+Commit message format: `fix: <concise description> (#issue_key)`
+
+### 4.2. Push
+
+```bash
+push_branch "origin" "bugfix/PROJ-123-cart-discount-fix"
+```
+
+### 4.3. Create PR
+
+Use git host CLI (`gh`, `glab`, or Backlog MCP):
+
+```bash
+# GitHub
+gh pr create --title "fix: PROJ-123 cart total NaN" --body "$(cat <<'EOF'
+## Bug Fix: PROJ-123
+
+**Root Cause:** discount_calculator.js divides by (1-rate) without bounds check
+**Fix:** Add guard clause for discount_rate >= 1.0
+**Testing:** Unit tests added + existing tests pass
+
+Closes PROJ-123
+EOF
+)"
+```
+
+For Backlog Git hosting:
+```
+MCP: add_pull_request(projectIdOrKey, repoIdOrName, ...)
+```
+
+### 4.4. Write State
+
+```json
+{
+  "PROJ-123": {
+    "agent_phase": "pr_created",
+    "agent_status": "approved",
+    "pr_url": "https://github.com/org/repo/pull/42",
+    "branch": "bugfix/PROJ-123-cart-discount-fix"
+  }
+}
+```
+
+---
+
+## GD 5: Log to Backlog
+
+### 5.1. Prepare Fix Comment
+
+Fill template `scripts/templates/fix_comment.md`. **Audience: comtor, PM, client — NOT developers.**
+
+**Audience: comtor, PM, khách hàng — KHÔNG phải developer.**
+
+### NEVER include in the comment:
+- File names: ~~`ja.json`, `auth.service.ts`, `useUserUpdate.tsx`~~
+- Code keys: ~~`editor.blocks.footerStepForm`, `contractStatus`, `editParentRoles`~~
+- Line numbers: ~~`auth.service.ts:105`~~
+- Code snippets: ~~`if (contractStatus !== ACTIVE) throw...`~~
+- Technical jargon: ~~"i18n key", "enum", "REST endpoint", "hook", "service layer"~~
+
+If the root cause is technical (missing translation key, wrong enum value, etc.) → describe the **symptom and business impact**, not the technical detail.
+
+### Field mapping — plain language:
+
+| Field | ❌ Technical (wrong) | ✅ Plain (correct) |
+|-------|---------------------|-------------------|
+| `root_cause_plain` | "Missing `editor.blocks.footerStepForm` in ja.json" | "Giao diện tiếng Nhật thiếu bản dịch cho tên của Navigation Block, dẫn đến hiển thị sai ngôn ngữ" |
+| `root_cause_plain` | "`auth.service.ts:105` throws `contract_suspended` for CANCELED" | "Hệ thống không phân biệt tài khoản bị tạm khóa vs đã hủy, hiển thị sai thông báo" |
+| `affected_area` | "`useUserUpdate.tsx`, `admin_fe`" | "Form chỉnh sửa Org Admin" |
+| `solution_plain` | "Added `contract_canceled` i18n key, branched enum check" | "Thêm thông báo riêng cho tài khoản đã hủy và bổ sung lựa chọn còn thiếu trong dropdown" |
+| `scope_plain` | "2 files changed in backend + admin_fe" | "Hẹp — chỉ ảnh hưởng màn hình đăng nhập và form quản lý user" |
+| `risk_plain` | "Low regression risk on enum branch" | "Thấp — chỉ thay đổi text hiển thị, không ảnh hưởng logic nghiệp vụ" |
+| `other_code_impact_plain` | "No callers affected" | "Không ảnh hưởng — chỉ thay đổi cách hiển thị giá trị trong bộ lọc, các màn hình khác dùng chung component này vẫn hoạt động bình thường" |
+
+### Đánh giá ảnh hưởng source code khác (`other_code_impact_plain`)
+
+Khi fill field này, agent PHẢI:
+1. Liệt kê các file/module **khác** có import hoặc sử dụng code đã sửa (grep callers/importers)
+2. Đánh giá ảnh hưởng: có bị break không? có cần sửa theo không?
+3. Diễn đạt bằng **ngôn ngữ plain** (không tên file, không code) — mô tả theo chức năng/màn hình
+4. Nếu không có ảnh hưởng → ghi rõ "Không ảnh hưởng"
+
+### PR Link trong comment
+
+**PHẢI** lấy `pr_url` từ state GD 4 → fill vào `{{pr_link}}` trong template section 4.
+Nếu chưa tạo PR (chưa push) → ghi `Chưa tạo PR`.
+Nếu sử dụng GitLab/GitHub → link phải clickable (full URL).
+
+### Example — HBU1895-803 (i18n bug):
 
 ```markdown
-## 🔍 Root Cause Analysis
+## 1. Nguyên Nhân
+Giao diện tiếng Nhật của Navigation Block trong sidebar bị hiển thị sai:
+tên các nút bị trộn lẫn tiếng Anh và tiếng Nhật, hoặc hiển thị cùng một tên
+cho tất cả các nút thay vì tên riêng biệt.
 
-**Bug:** PROJ-123 — [Title]
-**Severity:** 🔴 High | 🟡 Medium | 🟢 Low
+> *(Khu vực bị ảnh hưởng: Sidebar chỉnh sửa Navigation Block — trang Step Form LP)*
 
-### Visual Symptoms (từ screenshots)
-- Screenshot 1: [Mô tả cái gì sai trong ảnh]
-- Screenshot 2: [Expected vs Actual khác nhau ở đâu]
+## 2. Giải Pháp
+Bổ sung bản dịch tiếng Nhật còn thiếu cho các nút trong Navigation Block
+và cập nhật tên tiếng Anh đúng theo thiết kế.
+Sau fix, sidebar sẽ hiển thị đúng tên theo từng ngôn ngữ.
 
-### Nguyên nhân
-- [File:Line] — [Mô tả vấn đề cụ thể]
-- [Nguyên nhân gốc — cross-reference với visual symptoms]
+## 3. Ảnh Hưởng
+- **Phạm vi:** Hẹp — chỉ ảnh hưởng phần sidebar của Navigation Block
+- **Rủi ro:** Thấp — chỉ thay đổi text hiển thị, không ảnh hưởng chức năng
+- **Side effects:** Không có
+- **Ảnh hưởng source code khác:** Không ảnh hưởng — các màn hình khác không sử dụng chung phần hiển thị tên nút này
 
-### Affected Files
-- `path/to/file.ext` (primary)
-- `path/to/related.ext` (secondary)
-
-### Impact
-- Ảnh hưởng: [Ai bị ảnh hưởng]
-- Scope: [Module/feature nào]
+## 4. PR
+- **Branch:** `bugfix/HBU1895-803-nav-block-i18n`
+- **PR Link:** https://github.com/org/repo/pull/55
+- **Commit:** `a1b2c3d`
 ```
 
-### 2.2.1. Cross-Project Impact Analysis (QUAN TRỌNG)
+**Simple bug optimization:** Bỏ section 5 (Cross-Project) và 6 (Estimate) khi `scope = "narrow"` và `confidence = "HIGH"`.
 
-Sau khi xác định root cause, AI **phải kiểm tra phạm vi ảnh hưởng** sang các project liên quan:
+### 5.2. Post to Backlog (parallel MCP calls)
 
-**Quy trình:**
-1. Xác định project hiện tại (VD: `LP_BOOSTER-ADMIN-FE`)
-2. Scan workspace tìm related projects (VD: `LP_BOOSTER-BE`, `LP_BOOSTER-LP-FE`)
-3. Với mỗi project liên quan:
-   - Search cho code liên quan (API endpoint, validation, service)
-   - Đánh giá: project đó có cần fix không?
-
-**Checklist tự động:**
-```
-🔍 Cross-Project Impact Check:
-
-| Project | Liên quan? | Cần fix? | Lý do |
-|---------|-----------|---------|-------|
-| LP_BOOSTER-BE | ✅ Có (upload API) | ❌ Không | FE dùng presigned URL → bypass BE validation |
-| LP_BOOSTER-LP-FE | ❌ Không | — | End Card chỉ có ở Admin FE |
-```
-
-**Khi nào cần check BE:**
-- Validation logic (size, format, required fields)
-- API endpoint behavior (request/response format)
-- Database schema (new fields, constraints)
-- Business logic (calculation, workflow state)
-
-**Output format:**
-Nếu FE fix liên quan tới BE nhưng **BE không cần sửa**, phải giải thích rõ:
-```markdown
-### 🔗 Backend Impact
-- **Status:** ✅ Không cần fix
-- **Lý do:** [Giải thích cụ thể tại sao BE đã đáp ứng hoặc không bị ảnh hưởng]
-- **Evidence:** [File/endpoint/flow đã kiểm tra]
-```
-
-Nếu BE **cũng cần fix**:
-```markdown
-### 🔗 Backend Impact
-- **Status:** ⚠️ Cần fix
-- **File:** `path/to/backend/file.ts`
-- **Issue:** [Mô tả vấn đề phía BE]
-- **Suggest:** [Đề xuất fix]
-```
-
-### 2.3. Confidence Gate (NEW — QUAN TRỌNG)
-
-AI **tự đánh giá confidence** trước khi fix:
-
-| Level | Criteria | Action |
-|-------|----------|--------|
-| 🟢 **HIGH** | Root cause rõ ràng, code logic match visual symptoms, 1-3 files | Auto-fix + push + log |
-| 🟡 **MEDIUM** | Root cause likely, cần verify, fix có thể chưa hoàn chỉnh | Fix + push + log + ⚠️ warning |
-| 🔴 **LOW** | Không xác định root cause, visual bug phức tạp, >5 files | **SKIP fix** — chỉ log analysis lên Backlog |
+These two MCP calls are independent — run them in parallel:
 
 ```
-🟢 HIGH → Tiếp tục GĐ 3 (auto-fix)
-🟡 MEDIUM → Tiếp tục GĐ 3 nhưng cảnh báo: "⚠️ Fix này chưa chắc hoàn chỉnh, cần review kỹ"
-🔴 LOW → Skip GĐ 3-4, nhảy sang GĐ 5 (chỉ log analysis)
+MCP call 1: add_issue_comment(issueIdOrKey, content)    ← fix comment
+MCP call 2: update_issue(issueIdOrKey, statusId=3)      ← Resolved
 ```
 
-### 2.4. Hiển thị phân tích (không cần confirm)
+If runtime doesn't support parallel tool calls, run sequentially (comment first, then status).
 
-AI hiển thị root cause analysis + confidence rồi **tự quyết định**:
+### 5.3. Write State
 
-```
-"🧠 Root Cause Analysis:
-
-[Hiển thị Root Cause Analysis]
-
-📊 Confidence: 🟢 HIGH
-→ Tiếp tục auto-fix..."
+```json
+{
+  "PROJ-123": {
+    "agent_phase": "logged",
+    "agent_status": "completed"
+  }
+}
 ```
 
 ---
 
-## Giai đoạn 3: AI Auto-Fix
+## GD 6: Report
 
-### 3.1. Đánh giá độ phức tạp
+Generate report only when:
+- User explicitly requests it, OR
+- Config has `"report_auto": true`
 
-AI tự phân loại và thông báo:
-- **Simple** (1-3 files, logic rõ ràng) → Fix nhanh
-- **Medium** (3-5 files, cần refactor nhẹ) → Fix + giải thích chi tiết
-- **Complex** (>5 files, architectural change) → Fix + cảnh báo cần review kỹ
+### Templates Available
 
-### 3.2. Tự động sửa code
+| Template | When to use |
+|----------|-------------|
+| `fix_comment.md` | Always — posted to Backlog in GD 5 |
+| `analysis_comment.md` | When user asks for detailed analysis |
+| `pr_description.md` | Used in GD 4 for PR body |
+| `client_summary.md` | When user requests client-facing report |
+| `client_report.md` | When user requests full technical report |
 
-AI **tự động fix** không cần hỏi — dev sẽ review sau:
-- Sửa code trực tiếp sử dụng code editing tools
-- Chạy lint/format nếu project có config
-- Chạy test nếu có (và report kết quả)
-- Hiển thị diff cho dev review
-
-```
-"🛠️ Em đã fix xong! [Simple/Medium/Complex]
-
-📝 **Changes:**
-[Hiển thị diff tóm tắt]
-
-✅ Lint: Passed
-✅ Build: No errors
-
-Tiếp tục push?"
-```
-
-> [!NOTE]
-> Nếu bug quá phức tạp (Complex), AI vẫn tự fix nhưng sẽ **cảnh báo rõ ràng** cần review kỹ trước khi merge.
+Save generated reports to `reports/{issue_key}/`.
 
 ---
 
-## Giai đoạn 4: Git Operations
+## GD 7: Batch Mode
 
-### 4.1. Safety Guards (⚠️ QUAN TRỌNG)
+When input contains multiple issue keys.
 
-**KHÔNG BAO GIỜ:**
-- Push trực tiếp lên `main`, `master`, `develop`
-- Force push
-- Commit files chứa secrets
-
-**LUÔN LUÔN:**
-- Tạo branch riêng `bugfix/*`
-- Cần dev confirm trước khi push (trừ khi `auto_push: true`)
-- Chạy lint/test trước commit (nếu có config)
-
-### 4.2. Branch & Commit
-
-Sử dụng script `git_ops.sh`:
-```bash
-# Tạo branch
-source ~/.gemini/antigravity/skills/backlog-integration/scripts/git_ops.sh
-create_branch "PROJ-123" "cart-total-not-updating"
-# → bugfix/PROJ-123-cart-total-not-updating
-
-# Commit
-commit_changes "PROJ-123" "fix: recalculate cart total after removeItem"
-# → [PROJ-123] fix: recalculate cart total after removeItem
-```
-
-### 4.3. Push theo Git Host
-
-**Backlog Git:**
-```bash
-commit_changes "PROJ-123" "fix: recalculate cart total after removeItem" --backlog-keywords
-# Commit message sẽ thêm #fix → auto-update Backlog issue status
-git push origin bugfix/PROJ-123-cart-total-not-updating
-```
-
-**GitHub / GitLab:**
-```bash
-git push origin bugfix/PROJ-123-cart-total-not-updating
-# Sau đó tạo PR/MR qua API (nếu có token)
-```
-
-### 4.4. Xác nhận push
+### 7.1. Triage
 
 ```
-"🚀 Push thành công!
-
-📁 Branch: bugfix/PROJ-123-cart-total-not-updating
-📝 Commits: 1 commit
-📊 Changes: 2 files changed, +15 -3
-🎯 Remote: origin (github)"
+MCP: get_issues(projectIdOrKey=..., statusId=[1], count=20)
 ```
 
----
-
-## Giai đoạn 4.5: Tạo Pull Request (Auto)
-
-### 4.5.1. Tạo PR với Structured Description
-
-Sau khi push thành công, **tự động tạo PR** với body chứa analysis info.
-
-**GitHub (dùng `gh` CLI hoặc API):**
-```bash
-# Tạo PR body từ template pr_description.md
-gh pr create \
-  --title "[ISSUE-KEY] fix: short description" \
-  --body "$(cat pr_body.md)" \
-  --base develop \
-  --head bugfix/ISSUE-KEY-description
-```
-
-**Nếu `gh` CLI không có:**
-```bash
-# Fallback: Push và hiển thị link tạo PR manual
-# Remote sẽ trả về link: https://github.com/org/repo/pull/new/branch
-# AI hiển thị link cho dev click
-```
-
-**GitLab (dùng API):**
-```bash
-curl -X POST "https://gitlab.com/api/v4/projects/:id/merge_requests" \
-  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-  -d "source_branch=bugfix/..." \
-  -d "target_branch=develop" \
-  -d "title=[ISSUE-KEY] fix: ..." \
-  -d "description=$(cat pr_body.md)"
-```
-
-**Backlog Git:** Skip (commit keywords `#fix` auto-link)
-
-### 4.5.2. PR Body Template
-
-Sử dụng template `pr_description.md` — populate với data từ GĐ 2-3:
-- Root cause analysis
-- Solution applied
-- Impact assessment
-- Testing status
-- Link Backlog issue
-
-### 4.5.3. Xác nhận PR
+Display summary table:
 
 ```
-"🔗 **PR đã tạo:**
-📌 Title: [ISSUE-KEY] fix: description
-🎯 Base: develop ← bugfix/ISSUE-KEY-...
-📝 Description: Root cause + Solution + Impact
-🔗 Link: [PR URL]
+| # | Issue | Title | Priority | Status |
+|---|-------|-------|----------|--------|
+| 1 | PROJ-123 | Cart NaN | Critical | Open |
+| 2 | PROJ-456 | Login slow | High | Open |
+| 3 | PROJ-789 | Typo in footer | Low | Open |
+```
 
-Anh review PR và merge nhé!"
+Ask user: "Process in this order? (Y/n/reorder)"
+
+### 7.2. Processing — Choose Mode
+
+**Mode: full (subagent + worktree available)**
+
+Run issues in parallel, each in its own worktree + subagent:
+
+```
+┌─ Subagent 1 ─────────────────────────────────────┐
+│  Worktree: .worktrees/bugfix/PROJ-123-cart-nan    │
+│  Run: GD 1 → GD 5 (full single-issue flow)       │
+│  Context: isolated (own conversation)             │
+└───────────────────────────────────────────────────┘
+┌─ Subagent 2 ─────────────────────────────────────┐
+│  Worktree: .worktrees/bugfix/PROJ-456-login-slow  │
+│  Run: GD 1 → GD 5 (full single-issue flow)       │
+│  Context: isolated (own conversation)             │
+└───────────────────────────────────────────────────┘
+         ... (up to batch_concurrency limit)
+
+Concurrency limit: config "batch_concurrency" (default: 2)
+```
+
+Each subagent:
+- Gets its own worktree (no git conflicts)
+- Has isolated context (no token overflow)
+- Writes its own state entry in `bugfix_state.json`
+- Reports result back: {issue_key, status, pr_url, error}
+
+Orchestrator waits for batch to finish, then starts next batch if more issues remain.
+
+**Mode: mcp_only / legacy (no subagent)**
+
+Process sequentially:
+1. Run GD 1 → GD 5 for each issue in order
+2. Write state after each issue completes
+3. Clear working context between issues (keep only state summaries)
+4. If one issue fails → log error in state, continue to next
+
+### 7.3. Batch Summary
+
+After all issues processed, show:
+
+```
+| Issue | Status | PR | Time |
+|-------|--------|----|------|
+| PROJ-123 | ✅ Fixed | #42 | — |
+| PROJ-456 | ✅ Fixed | #43 | — |
+| PROJ-789 | ❌ LOW confidence, skipped | — | — |
 ```
 
 ---
 
-## Giai đoạn 5: Log Kết Quả Lên Backlog
+## State Lifecycle Reference
 
-### 5.1. Post Comment (MCP-First)
+| Agent Phase | Agent Status | Backlog Status | Trigger |
+|-------------|-------------|----------------|---------|
+| fetch | in_progress → completed | Open | GD 1 start/end |
+| analyze | in_progress → completed | Open | GD 2 start/end |
+| fix | in_progress → completed | In Progress (2) | GD 3 start/end |
+| review | in_progress → completed | In Progress (2) | GD 3.5 start/end |
+| pr_created | approved | In Progress (2) | GD 4 end |
+| logged | completed | Resolved (3) | GD 5 end |
+| blocked | blocked | Open | Any phase failure |
 
-**Ưu tiên MCP Mode** — gọi tool trực tiếp:
-
-```
-# Compose comment content từ template fix_comment.md
-# Populate variables: root_cause, solution, branch, pr, etc.
-
-# Post qua MCP:
-add_issue_comment(
-  issueIdOrKey: "PROJ-123",
-  content: "## 🤖 AI Bug Analysis Report\n\n### Root Cause\n[Nguyên nhân]\n..."
-)
-```
-
-**Fallback (nếu MCP không available):**
-```bash
-python3 ~/.gemini/antigravity/skills/backlog-integration/scripts/backlog_api.py \
-  --action add_comment \
-  --issue "PROJ-123" \
-  --content "Comment content here" \
-  --config .brain/backlog.json
-```
-
-Comment trên Backlog sẽ có format:
-
-```markdown
-## 🤖 AI Bug Analysis Report
-
-### Root Cause
-[Nguyên nhân]
-
-### Solution Applied
-- [Thay đổi 1]
-- [Thay đổi 2]
-
-### Impact Assessment
-- **Scope:** [Module]
-- **Risk:** [Low/Medium/High]
-- **Test:** ✅ / ⚠️ / ❌
-
-### Git Reference
-- Branch: `bugfix/PROJ-123-...`
-- PR: [#456](link)
-- Commit: `abc1234`
-
----
-*🤖 Generated by Antigravity AI — /bugfix workflow*
-```
-
-### 5.2. Update Issue Status (MCP-First)
-
-**MCP Mode:**
-```
-update_issue(issueIdOrKey: "PROJ-123", statusId: 3)  # 3 = Resolved
-```
-
-**Fallback:**
-```bash
-python3 backlog_api.py --action update_issue --issue PROJ-123 --status-id 3 --config .brain/backlog.json
-```
-
-```
-"📝 Đã log lên Backlog. Cập nhật status issue?
-1️⃣ → Processing (đang xử lý)
-2️⃣ → Resolved (đã giải quyết)
-3️⃣ → Giữ nguyên"
-```
+State is written to `.brain/bugfix_state.json` after each phase transition.
 
 ---
 
-## Giai đoạn 6: Report tự động (Full Automation)
+## Error Recovery
 
-Sau khi push + log Backlog xong, **tự động tạo cả 2 report** — không cần hỏi.
-
-### 6.1. Full Report — Auto-generate /report
-
-**AI tự động populate** template `client_report.md` với context từ bugfix:
-
-| Data | Nguồn |
-|------|-------|
-| AS-IS (Problem) | Bug description + root cause (GĐ 2) |
-| TO-BE (Solution) | Fix applied (GĐ 3) |
-| File Changes | Git diff (GĐ 4) |
-| Comparison | Impact assessment (GĐ 2) |
-| Git Reference | Branch, PR, commit (GĐ 4-4.5) |
-
-Generate mermaid diagrams tự động:
-- AS-IS: Flow bị lỗi (từ root cause analysis)
-- TO-BE: Flow sau fix (từ solution)
-
-Output: `reports/[YYMMDD]-[issue-key]-report.md`
-
-### 6.2. Summary Report — Auto-generate /report-summary
-
-**AI tự động populate** template `client_summary.md` với đúng **6 mục**:
-
-```markdown
-## 1. Nguyên Nhân     ← root_cause (GĐ 2)
-## 2. Giải Pháp       ← solution (GĐ 3)
-## 3. Ảnh Hưởng       ← scope + risk (GĐ 2)
-## 4. Backend Impact  ← cross-project analysis (GĐ 2.2.1)
-## 5. Estimate        ← AI ước lượng từ diff size
-## 6. PR              ← branch + PR link + commit (GĐ 4-4.5)
-```
-
-> [!NOTE]
-> Mục 4 (Backend Impact) phải giải thích:
-> - BE có bị ảnh hưởng không?
-> - Nếu KHÔNG → tại sao? (VD: "FE dùng presigned URL, bypass BE validation")
-> - Nếu CÓ → cần fix gì? File nào?
-
-Output: `reports/[YYMMDD]-[issue-key]-summary.md`
-
-### 6.3. Xác nhận
-
-```
-"📄 Report đã tạo!
-📍 reports/[YYMMDD]-[issue-key]-report.md (Full)
-📍 reports/[YYMMDD]-[issue-key]-summary.md (Summary)
-
-Anh copy nội dung gửi cho KH/comtor nhé!
-
-💡 Tip: Report có thể post thẳng lên Backlog comment nếu cần."
-```
-
----
-
-## ⚠️ NEXT STEPS (Menu số):
-```
-1️⃣ Fix bug khác? /bugfix [ISSUE]
-2️⃣ Xem code đã fix? Em show diff
-3️⃣ Lưu context? /save-brain
-4️⃣ Làm việc khác? /next
-```
-
----
-
-## 🛡️ RESILIENCE PATTERNS (Ẩn khỏi User)
-
-### Khi Backlog API fail:
-```
-1. Retry 1x sau 3 giây
-2. Nếu 401 → "API key hết hạn hoặc sai. Anh kiểm tra lại?"
-3. Nếu 404 → "Issue không tồn tại: [KEY]. Anh check lại mã issue?"
-4. Nếu timeout → "Backlog đang chậm. Thử lại sau?"
-```
-
-### Khi Git operation fail:
-```
-Nếu push bị reject:
-→ "Push bị reject. Có thể branch đã tồn tại trên remote."
-→ "1️⃣ Force push  2️⃣ Đổi tên branch  3️⃣ Cancel"
-
-Nếu merge conflict:
-→ "Có conflict với branch target. Anh cần resolve thủ công."
-```
-
-### Khi AI không tìm được root cause:
-```
-→ "🤔 Em chưa xác định được nguyên nhân chính xác.
-   Anh có thể cung cấp thêm context?
-   1️⃣ Chỉ cho em file/function liên quan
-   2️⃣ Cho em thêm thông tin reproduce
-   3️⃣ Skip analysis — Em chỉ log lên Backlog"
-```
-
-### Error messages đơn giản:
-```
-❌ "requests.exceptions.ConnectionError"
-✅ "Không kết nối được Backlog. Anh check mạng?"
-
-❌ "json.decoder.JSONDecodeError"  
-✅ "Config file bị lỗi format. Em tạo lại nhé?"
-
-❌ "git: remote rejected"
-✅ "Không push được. Anh có quyền push lên repo này không?"
-```
-
----
-
-## 🔗 LIÊN KẾT VỚI CÁC WORKFLOW KHÁC
-
-```
-/bugfix → Fetch + Analyze + Fix + Push + PR + Log
-     ↓
-/report → Full client report (AS-IS → TO-BE)
-/report-summary → 5-section summary (Nguyên nhân, Giải pháp, Ảnh hưởng, Estimate, PR)
-     ↓
-/save-brain → Lưu context cho session sau
-     ↓
-/test → Chạy test suite sau fix
-```
+| Error | Action |
+|-------|--------|
+| MCP unavailable at start | Switch to `legacy` mode, use Python scripts |
+| MCP fails mid-workflow | Retry once → if fails again, switch to `legacy` for remaining steps |
+| Tests fail after fix | Retry fix once (GD 3.3 → 3.4 loop, max 1 retry) |
+| Git push rejected | Pull + rebase, retry push once |
+| Confidence = LOW | Stop, report to user, do not auto-fix |
+| State file corrupted | Start fresh, log warning |

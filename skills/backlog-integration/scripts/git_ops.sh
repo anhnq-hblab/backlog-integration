@@ -5,9 +5,11 @@
 #
 # Usage:
 #   source git_ops.sh
-#   create_branch "PROJ-123" "cart-total-bug"
+#   create_worktree "PROJ-123" "cart-total-bug"     # Isolated worktree (recommended)
+#   create_branch "PROJ-123" "cart-total-bug"        # Standard branch (legacy)
 #   commit_changes "PROJ-123" "fix: recalculate cart total"
 #   push_branch "origin" "bugfix/PROJ-123-cart-total-bug"
+#   cleanup_worktree "PROJ-123"
 # =============================================================================
 
 set -euo pipefail
@@ -21,6 +23,8 @@ NC='\033[0m' # No Color
 
 # Protected branches — NEVER push directly to these
 PROTECTED_BRANCHES=("main" "master" "develop" "staging" "production")
+
+WORKTREE_BASE=".worktrees"
 
 # =============================================================================
 # Safety Checks
@@ -52,7 +56,111 @@ check_no_uncommitted_changes() {
 }
 
 # =============================================================================
-# Branch Operations
+# Worktree Operations (Recommended for isolation)
+# =============================================================================
+
+_sanitize_slug() {
+    echo "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | sed 's/--*/-/g' | sed 's/-$//'
+}
+
+_build_branch_name() {
+    local issue_key="$1"
+    local slug="${2:-}"
+    local branch_name="bugfix/${issue_key}"
+    if [[ -n "$slug" ]]; then
+        branch_name="bugfix/${issue_key}-$(_sanitize_slug "$slug")"
+    fi
+    echo "$branch_name"
+}
+
+create_worktree() {
+    local issue_key="$1"
+    local slug="${2:-}"
+
+    check_is_git_repo || return 1
+
+    local branch_name
+    branch_name=$(_build_branch_name "$issue_key" "$slug")
+    local wt_path="${WORKTREE_BASE}/${branch_name}"
+
+    # Ensure .worktrees/ is gitignored
+    if ! grep -qx "${WORKTREE_BASE}/" .gitignore 2>/dev/null; then
+        echo "${WORKTREE_BASE}/" >> .gitignore
+        echo -e "${BLUE}Added ${WORKTREE_BASE}/ to .gitignore${NC}"
+    fi
+
+    if [[ -d "$wt_path" ]]; then
+        echo -e "${YELLOW}Worktree already exists: ${wt_path}${NC}"
+        echo "$wt_path"
+        return 0
+    fi
+
+    local base_branch="develop"
+    if ! git show-ref --verify --quiet "refs/heads/develop" 2>/dev/null; then
+        base_branch=$(git branch --show-current)
+    fi
+
+    if git show-ref --verify --quiet "refs/heads/${branch_name}" 2>/dev/null; then
+        git worktree add "$wt_path" "$branch_name"
+    else
+        git worktree add -b "$branch_name" "$wt_path" "$base_branch"
+    fi
+
+    echo -e "${GREEN}Worktree created: ${wt_path} (branch: ${branch_name})${NC}"
+    echo "$wt_path"
+}
+
+cleanup_worktree() {
+    local issue_key="$1"
+    local slug="${2:-}"
+
+    check_is_git_repo || return 1
+
+    local branch_name
+    branch_name=$(_build_branch_name "$issue_key" "$slug")
+    local wt_path="${WORKTREE_BASE}/${branch_name}"
+
+    if [[ ! -d "$wt_path" ]]; then
+        echo -e "${YELLOW}Worktree not found: ${wt_path}${NC}"
+        return 0
+    fi
+
+    git worktree remove "$wt_path" --force 2>/dev/null || rm -rf "$wt_path"
+    echo -e "${GREEN}Worktree removed: ${wt_path}${NC}"
+
+    # Clean up empty parent dirs
+    rmdir "${WORKTREE_BASE}/bugfix" 2>/dev/null || true
+    rmdir "${WORKTREE_BASE}" 2>/dev/null || true
+}
+
+list_worktrees() {
+    check_is_git_repo || return 1
+    echo -e "${BLUE}Active worktrees:${NC}"
+    git worktree list
+}
+
+merge_worktree() {
+    local issue_key="$1"
+    local slug="${2:-}"
+    local target="${3:-develop}"
+
+    check_is_git_repo || return 1
+
+    local branch_name
+    branch_name=$(_build_branch_name "$issue_key" "$slug")
+
+    local current_branch
+    current_branch=$(git branch --show-current)
+
+    git checkout "$target"
+    git merge "$branch_name" --no-ff -m "Merge ${branch_name} into ${target}"
+    echo -e "${GREEN}Merged ${branch_name} into ${target}${NC}"
+
+    git checkout "$current_branch" 2>/dev/null || true
+}
+
+# =============================================================================
+# Branch Operations (Legacy — use create_worktree for new work)
 # =============================================================================
 
 create_branch() {
@@ -61,13 +169,8 @@ create_branch() {
 
     check_is_git_repo || return 1
 
-    # Build branch name
-    local branch_name="bugfix/${issue_key}"
-    if [[ -n "$slug" ]]; then
-        # Sanitize slug: lowercase, replace spaces with hyphens, remove special chars
-        slug=$(echo "$slug" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | sed 's/--*/-/g' | sed 's/-$//')
-        branch_name="bugfix/${issue_key}-${slug}"
-    fi
+    local branch_name
+    branch_name=$(_build_branch_name "$issue_key" "$slug")
 
     # Check if branch already exists
     if git show-ref --verify --quiet "refs/heads/${branch_name}" 2>/dev/null; then
@@ -193,13 +296,21 @@ get_last_commit_hash() {
 # If run directly (not sourced), show help
 # =============================================================================
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ -n "${BASH_SOURCE:-}" && "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Git Operations for /bugfix Workflow"
     echo ""
     echo "Usage: source git_ops.sh"
     echo ""
-    echo "Functions:"
+    echo "Worktree (recommended):"
+    echo "  create_worktree <issue_key> [slug]        Create isolated worktree + branch"
+    echo "  cleanup_worktree <issue_key> [slug]       Remove worktree after merge/PR"
+    echo "  list_worktrees                            List all active worktrees"
+    echo "  merge_worktree <issue_key> [slug] [target] Merge worktree branch into target"
+    echo ""
+    echo "Legacy:"
     echo "  create_branch <issue_key> [slug]          Create and switch to bugfix branch"
+    echo ""
+    echo "Common:"
     echo "  commit_changes <issue_key> <msg> [--backlog-keywords]  Commit changes"
     echo "  push_branch [remote] [branch]             Push branch to remote"
     echo "  show_diff_summary                         Show change summary"

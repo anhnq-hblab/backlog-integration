@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backlog Integration — AI DevOps Tool</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --cyan: #39d353;
+    --accent: #1f6feb;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ─── SLIDES CONTAINER ─── */
+  .slides-wrapper {
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transform: translateX(60px);
+    pointer-events: none;
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+
+  .slide.exit {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+
+  /* ─── DECORATIVE GRID ─── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(88,166,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(88,166,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .slide { z-index: 1; }
+
+  /* ─── NAV ─── */
+  .nav {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 100;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 10px 20px;
+  }
+
+  .nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+
+  .nav button:hover { background: var(--surface2); color: var(--text); }
+  .nav button:disabled { opacity: 0.3; cursor: default; }
+
+  .nav .counter {
+    font-size: 13px;
+    color: var(--muted);
+    min-width: 60px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .dot.active { background: var(--blue); width: 20px; border-radius: 3px; }
+
+  /* ─── COMMON ELEMENTS ─── */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .tag-blue { background: rgba(88,166,255,0.12); color: var(--blue); border: 1px solid rgba(88,166,255,0.25); }
+  .tag-green { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.25); }
+  .tag-orange { background: rgba(210,153,34,0.12); color: var(--orange); border: 1px solid rgba(210,153,34,0.25); }
+  .tag-purple { background: rgba(188,140,255,0.12); color: var(--purple); border: 1px solid rgba(188,140,255,0.25); }
+
+  h1 {
+    font-size: clamp(36px, 5vw, 58px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -1px;
+  }
+
+  h2 {
+    font-size: clamp(26px, 3.5vw, 40px);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  h3 { font-size: 18px; font-weight: 600; }
+
+  p { line-height: 1.7; color: var(--muted); }
+
+  .gradient-text {
+    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+
+  .card:hover {
+    border-color: rgba(88,166,255,0.3);
+    background: var(--surface2);
+    transition: all 0.2s;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; width: 100%; }
+
+  .icon { font-size: 28px; margin-bottom: 10px; }
+
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    color: var(--green);
+  }
+
+  .code-block {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    color: var(--text);
+    line-height: 1.8;
+    width: 100%;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .badge-blue { background: rgba(88,166,255,0.15); color: var(--blue); }
+
+  /* ─── PHASE TIMELINE ─── */
+  .timeline {
+    display: flex;
+    width: 100%;
+    gap: 0;
+    position: relative;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    top: 22px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--blue), var(--purple));
+    z-index: 0;
+  }
+
+  .phase {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .phase-dot {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    border: 2px solid;
+  }
+
+  .phase-label {
+    font-size: 10px;
+    text-align: center;
+    color: var(--muted);
+    line-height: 1.3;
+    max-width: 80px;
+  }
+
+  /* ─── SLIDE-SPECIFIC ─── */
+
+  /* COVER */
+  #slide-1 {
+    background: radial-gradient(ellipse at 20% 50%, rgba(31,111,235,0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 20%, rgba(188,140,255,0.1) 0%, transparent 50%);
+    text-align: center;
+    gap: 24px;
+  }
+
+  #slide-1 .subtitle {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 560px;
+  }
+
+  #slide-1 .version-badges {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* PROBLEM */
+  #slide-2 { gap: 32px; }
+  #slide-2 .content { display: flex; gap: 40px; align-items: flex-start; width: 100%; }
+  #slide-2 .left { flex: 1; }
+  #slide-2 .right { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+
+  .pain-item {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    border-left: 3px solid var(--red);
+  }
+
+  .pain-item .emoji { font-size: 20px; flex-shrink: 0; }
+  .pain-item p { font-size: 14px; color: var(--muted); margin: 0; }
+  .pain-item strong { color: var(--text); }
+
+  /* SOLUTION */
+  #slide-3 { gap: 32px; }
+
+  /* WORKFLOW */
+  #slide-4 { gap: 32px; }
+
+  /* MODES */
+  #slide-5 { gap: 28px; }
+
+  .mode-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+  }
+
+  .mode-card .mode-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .mode-card .caps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cap-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .cap-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .cap-dot.on { background: var(--green); }
+  .cap-dot.off { background: var(--border); }
+
+  /* REVIEW */
+  #slide-6 { gap: 28px; }
+
+  .review-layer {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    flex: 1;
+  }
+
+  .review-icon { font-size: 28px; flex-shrink: 0; }
+
+  .review-checks { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+
+  .check-item {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .check-item::before { content: '•'; color: var(--green); font-size: 16px; }
+
+  /* TOOLS */
+  #slide-7 { gap: 28px; }
+
+  .tool-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .tool-card .tool-name {
+    font-weight: 700;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tool-card .tool-meta {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* INNOVATION */
+  #slide-8 { gap: 28px; }
+
+  .inno-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* INSTALL */
+  #slide-9 { gap: 28px; }
+
+  /* CONFIG */
+  #slide-10 { gap: 24px; }
+
+  /* METRICS */
+  #slide-11 { gap: 32px; }
+
+  .metric-big {
+    font-size: 52px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .metric-label {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  /* CTA */
+  #slide-12 {
+    background: radial-gradient(ellipse at 50% 50%, rgba(31,111,235,0.15) 0%, transparent 70%);
+    text-align: center;
+    gap: 28px;
+  }
+
+  .cta-cmd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    padding: 14px 32px;
+    background: rgba(88,166,255,0.1);
+    border: 1px solid rgba(88,166,255,0.3);
+    border-radius: 10px;
+    color: var(--blue);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-block;
+  }
+
+  .cta-cmd:hover { background: rgba(88,166,255,0.2); }
+
+  /* ─── PROGRESS BAR ─── */
+  .progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--blue), var(--purple));
+    z-index: 200;
+    transition: width 0.4s ease;
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<div class="slides-wrapper" id="slidesWrapper">
+
+  <!-- SLIDE 1: COVER -->
+  <div class="slide active" id="slide-1">
+    <div class="tag tag-blue">v0.1.3 · Open Source · MIT</div>
+    <h1>
+      <span class="gradient-text">Backlog Integration</span>
+    </h1>
+    <p class="subtitle">
+      AI DevOps tool tự động hóa toàn bộ vòng đời bug fix —<br>
+      từ phân tích nguyên nhân đến tạo PR và báo cáo Backlog.
+    </p>
+    <div class="version-badges">
+      <span class="tag tag-green">Claude Code</span>
+      <span class="tag tag-blue">Cursor</span>
+      <span class="tag tag-purple">Antigravity</span>
+      <span class="tag tag-orange">Codex</span>
+      <span class="tag tag-blue">OpenCode</span>
+    </div>
+    <p style="font-size:13px; margin-top: 8px;">
+      <code>npx backlog-integration install</code>
+    </p>
+  </div>
+
+  <!-- SLIDE 2: VẤN ĐỀ -->
+  <div class="slide" id="slide-2">
+    <div style="width:100%">
+      <div class="tag tag-orange" style="margin-bottom:16px">Vấn đề</div>
+      <h2 style="margin-bottom:28px">Dev mất quá nhiều thời gian<br>vào quy trình thủ công</h2>
+    </div>
+    <div class="content">
+      <div class="left">
+        <p style="font-size:16px; line-height:1.9;">
+          Mỗi bug fix thông thường cần developer thực hiện
+          <strong style="color:var(--text)"> 7–10 bước thủ công</strong>:
+          đọc issue, phân tích root cause, sửa code, test,
+          tạo branch, commit, push, tạo PR, comment Backlog,
+          update status — lặp đi lặp lại mỗi ngày.
+        </p>
+      </div>
+      <div class="right">
+        <div class="pain-item">
+          <span class="emoji">⏱</span>
+          <p><strong>Tốn 30–60 phút</strong> mỗi bug chỉ cho overhead quy trình, không phải thời gian suy nghĩ</p>
+        </div>
+        <div class="pain-item">
+          <span class="emoji">🔁</span>
+          <p><strong>Lặp lại nhàm chán</strong>: commit message, PR description, comment Backlog theo format cố định</p>
+        </div>
+        <div class="pain-item">
+          <span class="emoji">🌐</span>
+          <p><strong>Context switch</strong> liên tục giữa IDE, Backlog, GitHub/GitLab làm mất tập trung</p>
+        </div>
+        <div class="pain-item">
+          <span class="emoji">📸</span>
+          <p><strong>Screenshot bị bỏ qua</strong> — thông tin quan trọng nhất trong bug report thường là ảnh</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: GIẢI PHÁP -->
+  <div class="slide" id="slide-3">
+    <div style="width:100%; margin-bottom:24px;">
+      <div class="tag tag-green" style="margin-bottom:16px">Giải pháp</div>
+      <h2>Một lệnh — AI lo hết</h2>
+    </div>
+    <div class="grid-3" style="margin-bottom: 16px;">
+      <div class="card">
+        <div class="icon">🔍</div>
+        <h3 style="margin-bottom:8px">Tự động phân tích</h3>
+        <p style="font-size:13px;">Fetch issue từ Backlog, đọc description, comment, phân tích screenshot để xác định root cause chính xác</p>
+      </div>
+      <div class="card">
+        <div class="icon">🛠</div>
+        <h3 style="margin-bottom:8px">Tự động fix</h3>
+        <p style="font-size:13px;">Tạo worktree riêng, sửa code, chạy test, review 3 lớp song song trước khi commit</p>
+      </div>
+      <div class="card">
+        <div class="icon">📬</div>
+        <h3 style="margin-bottom:8px">Tự động báo cáo</h3>
+        <p style="font-size:13px;">Tạo PR, comment Backlog bằng ngôn ngữ dễ hiểu cho comtor/PM, cập nhật status Resolved</p>
+      </div>
+    </div>
+    <div class="code-block" style="font-size:15px; text-align:center; padding: 20px;">/auto-bugfix HBU-1234</div>
+  </div>
+
+  <!-- SLIDE 4: WORKFLOW 7 PHASES -->
+  <div class="slide" id="slide-4">
+    <div style="width:100%; margin-bottom:28px;">
+      <div class="tag tag-blue" style="margin-bottom:16px">Workflow</div>
+      <h2>7-Phase Pipeline</h2>
+    </div>
+    <div class="timeline" style="margin-bottom:32px;">
+      <div class="phase">
+        <div class="phase-dot" style="background:rgba(88,166,255,0.15);color:var(--blue);border-color:var(--blue);">GD0</div>
+        <div class="phase-label">Init &amp;<br>Config</div>
+      </div>
+      <div class="phase">
+        <div class="phase-dot" style="background:rgba(63,185,80,0.15);color:var(--green);border-color:var(--green);">GD1</div>
+        <div class="phase-label">Fetch<br>Bug Info</div>
+      </div>
+      <div class="phase">
+        <div class="phase-dot" style="background:rgba(188,140,255,0.15);color:var(--purple);border-color:var(--purple);">GD2</div>
+        <div class="phase-label">Root Cause<br>Analysis</div>
+      </div>
+      <div class="phase">
+        <div class="phase-dot" style="background:rgba(210,153,34,0.15);color:var(--orange);border-color:var(--orange);">GD3</div>
+        <div class="phase-label">Auto<br>Fix</div>
+      </div>
+      <div class="phase">
+        <div class="phase-dot" style="background:rgba(88,166,255,0.15);color:var(--blue);border-color:var(--blue);">GD3.5</div>
+        <div class="phase-label">3-Layer<br>Review</div>
+      </div>
+      <div class="phase">
+        <div class="phase-dot" style="background:rgba(63,185,80,0.15);color:var(--green);border-color:var(--green);">GD4</div>
+        <div class="phase-label">Git<br>+ PR</div>
+      </div>
+      <div class="phase">
+        <div class="phase-dot" style="background:rgba(188,140,255,0.15);color:var(--purple);border-color:var(--purple);">GD5</div>
+        <div class="phase-label">Log to<br>Backlog</div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="margin-bottom:10px; font-size:14px;">State Resumability</h3>
+        <p style="font-size:13px;">Mỗi phase được lưu vào <code>.brain/bugfix_state.json</code> — nếu bị ngắt giữa chừng, có thể resume từ đúng bước đó mà không cần làm lại</p>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:10px; font-size:14px;">Confidence Gate</h3>
+        <p style="font-size:13px;">Sau GD2, AI đánh giá <span style="color:var(--green)">HIGH</span> / <span style="color:var(--orange)">MEDIUM</span> / <span style="color:var(--red)">LOW</span> confidence. LOW sẽ hỏi user trước khi auto-fix</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: EXECUTION MODES -->
+  <div class="slide" id="slide-5">
+    <div style="width:100%; margin-bottom:24px;">
+      <div class="tag tag-purple" style="margin-bottom:16px">Execution Modes</div>
+      <h2>Tự động phát hiện khả năng</h2>
+    </div>
+    <div class="grid-3">
+      <div class="mode-card" style="border-top: 3px solid var(--green);">
+        <div class="mode-header">
+          <h3>Full Mode</h3>
+          <span class="badge badge-green">Tối ưu</span>
+        </div>
+        <p style="font-size:13px; color:var(--muted);">Cursor, Antigravity</p>
+        <div class="caps">
+          <div class="cap-row"><span class="cap-dot on"></span>MCP Server</div>
+          <div class="cap-row"><span class="cap-dot on"></span>Subagent song song</div>
+          <div class="cap-row"><span class="cap-dot on"></span>Worktree isolation</div>
+          <div class="cap-row"><span class="cap-dot on"></span>Batch parallel</div>
+          <div class="cap-row"><span class="cap-dot on"></span>3-layer review</div>
+        </div>
+      </div>
+      <div class="mode-card" style="border-top: 3px solid var(--blue);">
+        <div class="mode-header">
+          <h3>MCP Only</h3>
+          <span class="badge badge-blue">Tốt</span>
+        </div>
+        <p style="font-size:13px; color:var(--muted);">Cline, Windsurf, Claude Web</p>
+        <div class="caps">
+          <div class="cap-row"><span class="cap-dot on"></span>MCP Server</div>
+          <div class="cap-row"><span class="cap-dot off"></span>Subagent</div>
+          <div class="cap-row"><span class="cap-dot off"></span>Worktree</div>
+          <div class="cap-row"><span class="cap-dot off"></span>Batch parallel</div>
+          <div class="cap-row"><span class="cap-dot on"></span>Self-review</div>
+        </div>
+      </div>
+      <div class="mode-card" style="border-top: 3px solid var(--border);">
+        <div class="mode-header">
+          <h3>Legacy</h3>
+          <span class="badge" style="background:rgba(139,148,158,0.15);color:var(--muted);">Cơ bản</span>
+        </div>
+        <p style="font-size:13px; color:var(--muted);">ChatGPT, Claude Web</p>
+        <div class="caps">
+          <div class="cap-row"><span class="cap-dot off"></span>MCP Server</div>
+          <div class="cap-row"><span class="cap-dot off"></span>Subagent</div>
+          <div class="cap-row"><span class="cap-dot off"></span>Worktree</div>
+          <div class="cap-row"><span class="cap-dot off"></span>Batch</div>
+          <div class="cap-row"><span class="cap-dot on"></span>REST Fallback</div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="width:100%; margin-top:16px;">
+      <p style="font-size:13px; text-align:center;">
+        Mode được <strong style="color:var(--text)">tự động phát hiện</strong> dựa trên tool đang dùng — không cần cấu hình thủ công.
+        Có thể override bằng <code>"execution_mode": "full"</code> trong <code>.brain/backlog.json</code>
+      </p>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: REVIEW LAYERS -->
+  <div class="slide" id="slide-6">
+    <div style="width:100%; margin-bottom:24px;">
+      <div class="tag tag-blue" style="margin-bottom:16px">Quality Gate</div>
+      <h2>3-Layer Review Song Song</h2>
+    </div>
+    <div style="display:flex; gap:16px; width:100%; margin-bottom:20px;">
+      <div class="review-layer">
+        <div class="review-icon">👨‍💻</div>
+        <div>
+          <h3 style="margin-bottom:8px; font-size:15px;">Code Quality</h3>
+          <p style="font-size:12px; color:var(--muted); margin-bottom:8px;">Senior Engineer</p>
+          <div class="review-checks">
+            <div class="check-item">Root cause thực sự được fix</div>
+            <div class="check-item">Không có regression risk</div>
+            <div class="check-item">Edge cases được xử lý</div>
+            <div class="check-item">Không có magic numbers</div>
+          </div>
+        </div>
+      </div>
+      <div class="review-layer">
+        <div class="review-icon">🧪</div>
+        <div>
+          <h3 style="margin-bottom:8px; font-size:15px;">Test Adequacy</h3>
+          <p style="font-size:12px; color:var(--muted); margin-bottom:8px;">QA Engineer</p>
+          <div class="review-checks">
+            <div class="check-item">Tests hiện tại vẫn pass</div>
+            <div class="check-item">Test mới cho bug scenario</div>
+            <div class="check-item">Coverage đủ</div>
+            <div class="check-item">E2E scenarios covered</div>
+          </div>
+        </div>
+      </div>
+      <div class="review-layer">
+        <div class="review-icon">🏗</div>
+        <div>
+          <h3 style="margin-bottom:8px; font-size:15px;">Architecture</h3>
+          <p style="font-size:12px; color:var(--muted); margin-bottom:8px;">Solution Architect</p>
+          <div class="review-checks">
+            <div class="check-item">Scoped đúng — không lan rộng</div>
+            <div class="check-item">Không break API</div>
+            <div class="check-item">Không cần migration</div>
+            <div class="check-item">Đúng layer / pattern</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card" style="display:flex; gap:12px; align-items:center;">
+        <span style="font-size:24px;">✅</span>
+        <p style="font-size:13px;">All PASS → Proceed to GD4. WARN → Proceed + đính kèm vào PR. FAIL → Re-fix (max 1 lần)</p>
+      </div>
+      <div class="card" style="display:flex; gap:12px; align-items:center;">
+        <span style="font-size:24px;">⚡</span>
+        <p style="font-size:13px;">Full mode: 3 subagents chạy <strong style="color:var(--text)">song song</strong> — giảm 60% thời gian chờ so với sequential review</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: TOOLS SUPPORT -->
+  <div class="slide" id="slide-7">
+    <div style="width:100%; margin-bottom:24px;">
+      <div class="tag tag-green" style="margin-bottom:16px">Tương thích</div>
+      <h2>Hỗ trợ 5 AI Coding Tools</h2>
+    </div>
+    <div class="grid-3" style="margin-bottom:16px;">
+      <div class="tool-card" style="border-top: 2px solid var(--orange);">
+        <div class="tool-name">🤖 Claude Code</div>
+        <div class="tool-meta">
+          Install: <code>~/.claude/skills/</code><br>
+          PR: <code>gh</code> CLI<br>
+          <span class="badge badge-blue">MCP + gh</span>
+        </div>
+      </div>
+      <div class="tool-card" style="border-top: 2px solid var(--blue);">
+        <div class="tool-name">🖱 Cursor</div>
+        <div class="tool-meta">
+          Install: <code>~/.cursor/skills/</code><br>
+          PR: <code>gh</code> CLI<br>
+          <span class="badge badge-green">Full Mode</span>
+        </div>
+      </div>
+      <div class="tool-card" style="border-top: 2px solid var(--purple);">
+        <div class="tool-name">⚛ Antigravity</div>
+        <div class="tool-meta">
+          Install: <code>~/.gemini/antigravity/</code><br>
+          PR: Backlog MCP<br>
+          <span class="badge badge-green">Full Mode</span>
+        </div>
+      </div>
+      <div class="tool-card" style="border-top: 2px solid var(--green);">
+        <div class="tool-name">📦 Codex</div>
+        <div class="tool-meta">
+          Install: <code>~/.codex/skills/</code><br>
+          PR: Backlog MCP<br>
+          <span class="badge badge-blue">MCP</span>
+        </div>
+      </div>
+      <div class="tool-card" style="border-top: 2px solid var(--cyan);">
+        <div class="tool-name">🔓 OpenCode</div>
+        <div class="tool-meta">
+          Install: <code>~/.config/opencode/</code><br>
+          PR: <code>gh</code> CLI<br>
+          <span class="badge badge-blue">MCP + basic</span>
+        </div>
+      </div>
+      <div class="tool-card" style="border-top: 2px solid var(--border); justify-content:center; align-items:center; background: transparent;">
+        <p style="font-size:12px; color:var(--muted); text-align:center;">Thêm nhiều tools<br>sẽ được hỗ trợ</p>
+      </div>
+    </div>
+    <div class="card" style="width:100%;">
+      <p style="font-size:13px; text-align:center;">
+        <code>npx backlog-integration install --tool all --location global</code>
+        — cài đặt cho tất cả tools cùng lúc
+      </p>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: KEY INNOVATIONS -->
+  <div class="slide" id="slide-8">
+    <div style="width:100%; margin-bottom:24px;">
+      <div class="tag tag-purple" style="margin-bottom:16px">Điểm nổi bật</div>
+      <h2>Innovations Chính</h2>
+    </div>
+    <div style="display:flex; gap:16px; width:100%;">
+      <div class="inno-card" style="border-top: 3px solid var(--purple);">
+        <div class="icon">📸</div>
+        <h3 style="margin-bottom:8px;">Image Analysis</h3>
+        <p style="font-size:13px; line-height:1.7;">
+          Download ảnh từ Backlog, extract:
+          <br>• Error message từ popup
+          <br>• Tên UI component, label
+          <br>• Route/URL từ address bar
+          <br>• Visual diff before/after
+          <br><br>
+          <strong style="color:var(--text)">Cross-check</strong> root cause với visual evidence —
+          đặc biệt quan trọng cho frontend bugs.
+        </p>
+      </div>
+      <div class="inno-card" style="border-top: 3px solid var(--blue);">
+        <div class="icon">🌿</div>
+        <h3 style="margin-bottom:8px;">Worktree Isolation</h3>
+        <p style="font-size:13px; line-height:1.7;">
+          Mỗi bug fix được thực hiện trong
+          <strong style="color:var(--text)">git worktree riêng biệt</strong>.
+          <br><br>
+          • Không conflict khi fix nhiều bugs song song
+          <br>• Dễ dàng compare changes
+          <br>• Clean rollback nếu review fail
+          <br>• Batch mode fix N bugs đồng thời
+        </p>
+      </div>
+      <div class="inno-card" style="border-top: 3px solid var(--green);">
+        <div class="icon">💬</div>
+        <h3 style="margin-bottom:8px;">Plain Language Comments</h3>
+        <p style="font-size:13px; line-height:1.7;">
+          Comment Backlog được viết cho
+          <strong style="color:var(--text)">comtor / PM / client</strong> —
+          không phải developer.
+          <br><br>
+          ❌ Không: file names, code snippets, line numbers
+          <br>✅ Có: triệu chứng, impact, phạm vi ảnh hưởng
+          <br><br>
+          Format tiếng Việt + template chuẩn theo dự án.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: INSTALLATION -->
+  <div class="slide" id="slide-9">
+    <div style="width:100%; margin-bottom:24px;">
+      <div class="tag tag-green" style="margin-bottom:16px">Cài đặt</div>
+      <h2>Bắt đầu trong 3 bước</h2>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; width:100%;">
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="width:36px;height:36px;border-radius:50%;background:rgba(88,166,255,0.15);border:2px solid var(--blue);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--blue);flex-shrink:0;">1</div>
+        <div style="flex:1;">
+          <h3 style="margin-bottom:8px;">Install skill vào tool của bạn</h3>
+          <div class="code-block">npx backlog-integration install</div>
+          <p style="font-size:12px; margin-top:8px;">Interactive wizard sẽ hỏi tool nào (Claude Code / Cursor / ...) và global hay project-local</p>
+        </div>
+      </div>
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="width:36px;height:36px;border-radius:50%;background:rgba(63,185,80,0.15);border:2px solid var(--green);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--green);flex-shrink:0;">2</div>
+        <div style="flex:1;">
+          <h3 style="margin-bottom:8px;">Setup config với API key</h3>
+          <div class="code-block">npx backlog-integration setup --api-key "YOUR_BACKLOG_API_KEY"</div>
+          <p style="font-size:12px; margin-top:8px;">Auto-detect git remote để điền <code>backlog_space</code>, <code>project_key</code>, <code>git_host</code> — sinh file <code>.brain/backlog.json</code></p>
+        </div>
+      </div>
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="width:36px;height:36px;border-radius:50%;background:rgba(188,140,255,0.15);border:2px solid var(--purple);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--purple);flex-shrink:0;">3</div>
+        <div style="flex:1;">
+          <h3 style="margin-bottom:8px;">Chạy auto-bugfix</h3>
+          <div class="code-block">/auto-bugfix PROJ-1234
+# hoặc dán URL:
+/auto-bugfix https://myteam.backlog.com/view/PROJ-1234</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: CONFIG -->
+  <div class="slide" id="slide-10">
+    <div style="width:100%; margin-bottom:20px;">
+      <div class="tag tag-orange" style="margin-bottom:16px">Cấu hình</div>
+      <h2>.brain/backlog.json</h2>
+    </div>
+    <div style="display:flex; gap:16px; width:100%;">
+      <div class="code-block" style="flex:1; font-size:12px;">{
+  <span style="color:var(--blue);">"backlog_space"</span>: <span style="color:var(--green);">"myteam.backlog.com"</span>,
+  <span style="color:var(--blue);">"backlog_api_key"</span>: <span style="color:var(--green);">"YOUR_KEY"</span>,
+  <span style="color:var(--blue);">"project_key"</span>: <span style="color:var(--green);">"PROJ"</span>,
+  <span style="color:var(--blue);">"git_host"</span>: <span style="color:var(--green);">"github"</span>,
+  <span style="color:var(--blue);">"auto_branch"</span>: <span style="color:var(--orange);">true</span>,
+  <span style="color:var(--blue);">"auto_push"</span>: <span style="color:var(--orange);">true</span>,
+  <span style="color:var(--blue);">"report_lang"</span>: <span style="color:var(--green);">"vi"</span>,
+
+  <span style="color:var(--muted);">// Advanced options</span>
+  <span style="color:var(--blue);">"execution_mode"</span>: <span style="color:var(--green);">"auto"</span>,
+  <span style="color:var(--blue);">"review_layers"</span>: [<span style="color:var(--green);">"code_quality"</span>, <span style="color:var(--green);">"test_coverage"</span>, <span style="color:var(--green);">"architecture"</span>],
+  <span style="color:var(--blue);">"review_max_iterations"</span>: <span style="color:var(--orange);">2</span>,
+  <span style="color:var(--blue);">"batch_concurrency"</span>: <span style="color:var(--orange);">2</span>,
+  <span style="color:var(--blue);">"lazy_fetch"</span>: <span style="color:var(--orange);">true</span>
+}</div>
+      <div style="flex:1; display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <h3 style="font-size:13px; margin-bottom:6px;">MCP Ưu tiên</h3>
+          <p style="font-size:12px;">Tool dùng <code>backlog-mcp-server</code> làm primary. Python scripts chỉ fallback cho binary (images) hoặc khi MCP không khả dụng</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size:13px; margin-bottom:6px;">Token Optimization</h3>
+          <p style="font-size:12px;"><code>lazy_fetch: true</code> → chỉ load description/comments khi cần. <code>MAX_TOKENS=5000</code> cho MCP responses. Tiết kiệm 50–65% tokens</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size:13px; margin-bottom:6px;">Google Sheets Alternative</h3>
+          <p style="font-size:12px;">Không dùng Backlog? Dùng workflow <code>/auto-bugfix-sheet</code> với <code>google_sheets.json.template</code> — đọc bug context từ Sheets</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: METRICS -->
+  <div class="slide" id="slide-11">
+    <div style="width:100%; margin-bottom:28px;">
+      <div class="tag tag-green" style="margin-bottom:16px">Hiệu quả</div>
+      <h2>Numbers</h2>
+    </div>
+    <div class="grid-3" style="margin-bottom:16px;">
+      <div class="metric-card">
+        <div class="metric-big gradient-text">65%</div>
+        <div class="metric-label">Giảm token sử dụng</div>
+        <p style="font-size:12px;">Qua lazy loading, response limits và context pruning</p>
+      </div>
+      <div class="metric-card">
+        <div class="metric-big" style="color:var(--green);">60%</div>
+        <div class="metric-label">Giảm wall-time review</div>
+        <p style="font-size:12px;">3 subagents review song song thay vì tuần tự</p>
+      </div>
+      <div class="metric-card">
+        <div class="metric-big" style="color:var(--purple);">7</div>
+        <div class="metric-label">Phases tự động</div>
+        <p style="font-size:12px;">Từ fetch đến resolved — không cần can thiệp thủ công</p>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="metric-card" style="flex-direction:row; align-items:center; gap:16px; padding:16px 20px;">
+        <div class="metric-big" style="font-size:36px; color:var(--orange);">5</div>
+        <div>
+          <div class="metric-label">AI Tools hỗ trợ</div>
+          <p style="font-size:12px;">Claude Code, Cursor, Antigravity, Codex, OpenCode</p>
+        </div>
+      </div>
+      <div class="metric-card" style="flex-direction:row; align-items:center; gap:16px; padding:16px 20px;">
+        <div class="metric-big" style="font-size:36px; color:var(--blue);">3</div>
+        <div>
+          <div class="metric-label">Execution Modes</div>
+          <p style="font-size:12px;">Full, MCP Only, Legacy — tự động detect</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 12: CTA -->
+  <div class="slide" id="slide-12">
+    <div class="tag tag-green" style="margin-bottom: 20px;">Open Source · MIT License</div>
+    <h1><span class="gradient-text">Bắt đầu ngay hôm nay</span></h1>
+    <p style="font-size:17px; max-width:520px; text-align:center;">
+      Tích hợp Backlog với AI coding tool của bạn — tự động hóa toàn bộ bug fix workflow chỉ với một lệnh.
+    </p>
+    <div class="cta-cmd">npx backlog-integration install</div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+      <span class="tag tag-blue">npm: backlog-integration</span>
+      <span class="tag tag-purple">Node.js >= 18</span>
+      <span class="tag tag-green">v0.1.3</span>
+    </div>
+    <p style="font-size:13px; color:var(--muted); margin-top:8px;">
+      Xem thêm: <code>SKILL.md</code> · <code>auto-bugfix.md</code> · <code>README.md</code>
+    </p>
+  </div>
+
+</div><!-- end slides-wrapper -->
+
+<!-- NAV -->
+<div class="nav">
+  <button id="btnPrev" onclick="changeSlide(-1)">← Trước</button>
+  <div class="dots" id="dotsContainer"></div>
+  <span class="counter" id="counter">1 / 12</span>
+  <button id="btnNext" onclick="changeSlide(1)">Tiếp →</button>
+</div>
+
+<script>
+  const totalSlides = 12;
+  let current = 1;
+  let animating = false;
+
+  const slides = () => document.querySelectorAll('.slide');
+  const dotsContainer = document.getElementById('dotsContainer');
+  const counter = document.getElementById('counter');
+  const progressBar = document.getElementById('progressBar');
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+
+  // Build dots
+  for (let i = 1; i <= totalSlides; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i === 1 ? ' active' : '');
+    dot.onclick = () => goTo(i);
+    dotsContainer.appendChild(dot);
+  }
+
+  function updateUI() {
+    counter.textContent = `${current} / ${totalSlides}`;
+    progressBar.style.width = `${(current / totalSlides) * 100}%`;
+    btnPrev.disabled = current === 1;
+    btnNext.disabled = current === totalSlides;
+    document.querySelectorAll('.dot').forEach((d, i) => {
+      d.classList.toggle('active', i + 1 === current);
+    });
+  }
+
+  function goTo(next) {
+    if (animating || next === current || next < 1 || next > totalSlides) return;
+    animating = true;
+
+    const currentSlide = document.getElementById(`slide-${current}`);
+    const nextSlide = document.getElementById(`slide-${next}`);
+
+    currentSlide.classList.add('exit');
+    currentSlide.classList.remove('active');
+
+    setTimeout(() => {
+      currentSlide.classList.remove('exit');
+      nextSlide.classList.add('active');
+      current = next;
+      updateUI();
+      animating = false;
+    }, 450);
+  }
+
+  function changeSlide(dir) {
+    goTo(current + dir);
+  }
+
+  // Keyboard nav
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault();
+      changeSlide(1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      changeSlide(-1);
+    } else if (e.key >= '1' && e.key <= '9') {
+      goTo(parseInt(e.key));
+    }
+  });
+
+  // Touch swipe
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) changeSlide(dx < 0 ? 1 : -1);
+  });
+
+  updateUI();
+</script>
+</body>
+</html>

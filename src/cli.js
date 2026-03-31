@@ -240,7 +240,9 @@ function buildInstallMatrix({ tools, locations }) {
 async function runInstall(options) {
   const assetRoot = path.resolve(__dirname, "..", "skills", "backlog-integration");
   const homeDir = os.homedir();
-  const projectPath = path.resolve(process.cwd());
+  const projectPath = options["project-path"]
+    ? path.resolve(options["project-path"])
+    : path.resolve(process.cwd());
   const installs = buildInstallMatrix({
     tools: options.tools || resolveTools(options.tool),
     locations:
@@ -251,10 +253,6 @@ async function runInstall(options) {
   });
 
   for (const { tool, location } of installs) {
-    const preferGeminiAntigravity =
-      tool === "antigravity" &&
-      fs.existsSync(path.join(homeDir, ".gemini/antigravity/skills")) &&
-      !fs.existsSync(path.join(homeDir, ".agent/skills"));
     const destDir = options.dest
       ? path.resolve(options.dest)
       : resolveInstallPath({
@@ -262,7 +260,6 @@ async function runInstall(options) {
           location,
           homeDir,
           cwd: projectPath,
-          preferGeminiAntigravity,
         });
 
     await installSkill({ assetRoot, destDir });
@@ -275,7 +272,6 @@ async function runInstall(options) {
           location,
           homeDir,
           cwd: projectPath,
-          preferGeminiAntigravity,
         });
 
     const workflowResult = await installWorkflows({ assetRoot, destDir: workflowDir });

@@ -35,7 +35,7 @@ function normalizeLocation(location) {
   return normalized;
 }
 
-function resolveBaseDir({ tool, location, homeDir, cwd, preferGeminiAntigravity }) {
+function resolveBaseDir({ tool, location, homeDir, cwd }) {
   if (location === "project-local") {
     const projectLocalDirs = {
       "claude-code": ".claude/skills",
@@ -47,25 +47,21 @@ function resolveBaseDir({ tool, location, homeDir, cwd, preferGeminiAntigravity 
     return path.join(cwd, projectLocalDirs[tool]);
   }
 
-  if (tool === "antigravity" && preferGeminiAntigravity) {
-    return path.join(homeDir, ".gemini/antigravity/skills");
-  }
-
   const globalDirs = {
     "claude-code": ".claude/skills",
     cursor: ".cursor/skills",
     codex: ".codex/skills",
-    antigravity: ".agent/skills",
+    antigravity: ".gemini/antigravity/skills",
     opencode: ".config/opencode/skills",
   };
   return path.join(homeDir, globalDirs[tool]);
 }
 
-function resolveWorkflowBaseDir({ tool, location, homeDir, cwd, preferGeminiAntigravity }) {
+function resolveWorkflowBaseDir({ tool, location, homeDir, cwd }) {
   if (location === "project-local") {
     const projectLocalDirs = {
       "claude-code": ".claude/commands",
-      cursor: ".cursor/workflows",
+      cursor: ".cursor/commands",
       codex: ".codex/workflows",
       antigravity: ".agent/workflows",
       opencode: ".opencode/workflows",
@@ -73,15 +69,11 @@ function resolveWorkflowBaseDir({ tool, location, homeDir, cwd, preferGeminiAnti
     return path.join(cwd, projectLocalDirs[tool]);
   }
 
-  if (tool === "antigravity" && preferGeminiAntigravity) {
-    return path.join(homeDir, ".gemini/antigravity/global_workflows");
-  }
-
   const globalDirs = {
     "claude-code": ".claude/commands",
-    cursor: ".cursor/workflows",
+    cursor: ".cursor/commands",
     codex: ".codex/workflows",
-    antigravity: ".agent/workflows",
+    antigravity: ".gemini/antigravity/global_workflows",
     opencode: ".config/opencode/workflows",
   };
   return path.join(homeDir, globalDirs[tool]);
@@ -92,7 +84,6 @@ function resolveInstallPath({
   location,
   homeDir,
   cwd,
-  preferGeminiAntigravity = false,
 }) {
   const normalizedTool = normalizeToolName(tool);
   const normalizedLocation = normalizeLocation(location);
@@ -101,7 +92,6 @@ function resolveInstallPath({
     location: normalizedLocation,
     homeDir,
     cwd,
-    preferGeminiAntigravity,
   });
 
   return path.join(baseDir, SKILL_DIRNAME);
@@ -112,7 +102,6 @@ function resolveWorkflowPath({
   location,
   homeDir,
   cwd,
-  preferGeminiAntigravity = false,
 }) {
   const normalizedTool = normalizeToolName(tool);
   const normalizedLocation = normalizeLocation(location);
@@ -121,7 +110,6 @@ function resolveWorkflowPath({
     location: normalizedLocation,
     homeDir,
     cwd,
-    preferGeminiAntigravity,
   });
 }
 

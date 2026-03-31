@@ -101,26 +101,13 @@ test("resolveInstallPath returns project-local directories", () => {
   );
 });
 
-test("resolveInstallPath prefers ~/.agent for antigravity global installs", () => {
+test("resolveInstallPath uses ~/.gemini/antigravity for antigravity global installs", () => {
   assert.equal(
     resolveInstallPath({
       tool: "antigravity",
       location: "global",
       homeDir: "/tmp/home",
       cwd: "/tmp/project",
-    }),
-    "/tmp/home/.agent/skills/backlog-integration"
-  );
-});
-
-test("resolveInstallPath can prefer ~/.gemini/antigravity/skills for antigravity", () => {
-  assert.equal(
-    resolveInstallPath({
-      tool: "antigravity",
-      location: "global",
-      homeDir: "/tmp/home",
-      cwd: "/tmp/project",
-      preferGeminiAntigravity: true,
     }),
     "/tmp/home/.gemini/antigravity/skills/backlog-integration"
   );
@@ -136,12 +123,12 @@ test("resolveWorkflowPath returns global workflow directories", () => {
 
   assert.equal(
     resolveWorkflowPath({ tool: "cursor", location: "global", homeDir, cwd: "/tmp/p" }),
-    "/tmp/home/.cursor/workflows"
+    "/tmp/home/.cursor/commands"
   );
 
   assert.equal(
     resolveWorkflowPath({ tool: "antigravity", location: "global", homeDir, cwd: "/tmp/p" }),
-    "/tmp/home/.agent/workflows"
+    "/tmp/home/.gemini/antigravity/global_workflows"
   );
 });
 
@@ -159,15 +146,4 @@ test("resolveWorkflowPath returns project-local workflow directories", () => {
   );
 });
 
-test("resolveWorkflowPath prefers gemini path for antigravity", () => {
-  assert.equal(
-    resolveWorkflowPath({
-      tool: "antigravity",
-      location: "global",
-      homeDir: "/tmp/home",
-      cwd: "/tmp/p",
-      preferGeminiAntigravity: true,
-    }),
-    "/tmp/home/.gemini/antigravity/global_workflows"
-  );
-});
+

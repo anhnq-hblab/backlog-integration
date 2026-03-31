@@ -1,15 +1,31 @@
 #!/usr/bin/env bash
 # =============================================================================
-# MCP Backlog Server Wrapper
-# Part of: backlog-integration skill for Antigravity AWF
+# DEPRECATED: MCP Backlog Server Wrapper
 #
-# Usage:
-#   source scripts/mcp_backlog.sh
-#   mcp_start          # Start MCP server (reads from .brain/backlog.json)
-#   mcp_stop           # Stop MCP server
-#   mcp_status         # Check if running
-#   mcp_config_check   # Validate config and show MCP JSON
+# This script is no longer needed. MCP server lifecycle is managed natively
+# by the IDE (Cursor, Antigravity, etc.) via mcpServers config.
+#
+# Configure MCP in your IDE settings instead:
+#   {
+#     "mcpServers": {
+#       "backlog": {
+#         "command": "backlog-mcp-server",
+#         "env": {
+#           "BACKLOG_DOMAIN": "your-domain.backlog.com",
+#           "BACKLOG_API_KEY": "your-api-key",
+#           "OPTIMIZE_RESPONSE": "1",
+#           "MAX_TOKENS": "5000",
+#           "ENABLE_TOOLSETS": "issue,git"
+#         }
+#       }
+#     }
+#   }
+#
+# See SKILL.md for details.
 # =============================================================================
+
+echo "WARNING: mcp_backlog.sh is deprecated. MCP server is managed by your IDE." >&2
+echo "See SKILL.md for MCP configuration instructions." >&2
 
 set -euo pipefail
 
