@@ -486,6 +486,21 @@ If the root cause is technical (missing translation key, wrong enum value, etc.)
 | `solution_plain` | "Added `contract_canceled` i18n key, branched enum check" | "Thêm thông báo riêng cho tài khoản đã hủy và bổ sung lựa chọn còn thiếu trong dropdown" |
 | `scope_plain` | "2 files changed in backend + admin_fe" | "Hẹp — chỉ ảnh hưởng màn hình đăng nhập và form quản lý user" |
 | `risk_plain` | "Low regression risk on enum branch" | "Thấp — chỉ thay đổi text hiển thị, không ảnh hưởng logic nghiệp vụ" |
+| `other_code_impact_plain` | "No callers affected" | "Không ảnh hưởng — chỉ thay đổi cách hiển thị giá trị trong bộ lọc, các màn hình khác dùng chung component này vẫn hoạt động bình thường" |
+
+### Đánh giá ảnh hưởng source code khác (`other_code_impact_plain`)
+
+Khi fill field này, agent PHẢI:
+1. Liệt kê các file/module **khác** có import hoặc sử dụng code đã sửa (grep callers/importers)
+2. Đánh giá ảnh hưởng: có bị break không? có cần sửa theo không?
+3. Diễn đạt bằng **ngôn ngữ plain** (không tên file, không code) — mô tả theo chức năng/màn hình
+4. Nếu không có ảnh hưởng → ghi rõ "Không ảnh hưởng"
+
+### PR Link trong comment
+
+**PHẢI** lấy `pr_url` từ state GD 4 → fill vào `{{pr_link}}` trong template section 4.
+Nếu chưa tạo PR (chưa push) → ghi `Chưa tạo PR`.
+Nếu sử dụng GitLab/GitHub → link phải clickable (full URL).
 
 ### Example — HBU1895-803 (i18n bug):
 
@@ -506,6 +521,12 @@ Sau fix, sidebar sẽ hiển thị đúng tên theo từng ngôn ngữ.
 - **Phạm vi:** Hẹp — chỉ ảnh hưởng phần sidebar của Navigation Block
 - **Rủi ro:** Thấp — chỉ thay đổi text hiển thị, không ảnh hưởng chức năng
 - **Side effects:** Không có
+- **Ảnh hưởng source code khác:** Không ảnh hưởng — các màn hình khác không sử dụng chung phần hiển thị tên nút này
+
+## 4. PR
+- **Branch:** `bugfix/HBU1895-803-nav-block-i18n`
+- **PR Link:** https://github.com/org/repo/pull/55
+- **Commit:** `a1b2c3d`
 ```
 
 **Simple bug optimization:** Bỏ section 5 (Cross-Project) và 6 (Estimate) khi `scope = "narrow"` và `confidence = "HIGH"`.

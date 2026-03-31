@@ -21,6 +21,7 @@
 - **Phạm vi:** {{scope_plain}}
 - **Rủi ro:** {{risk_plain}}
 - **Side effects:** {{side_effects_plain}}
+- **Ảnh hưởng source code khác:** {{other_code_impact_plain}}
 
 ---
 
